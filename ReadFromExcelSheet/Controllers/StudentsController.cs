@@ -1,6 +1,7 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using OfficeOpenXml;
 using OfficeOpenXml.Drawing;
+using ReadFromExcelSheet.BLL.Interface;
 using ReadFromExcelSheet.DTO;
 using ReadFromExcelSheet.Utilites;
 using ReadFromExcelSheet.Utiltes;
@@ -12,6 +13,12 @@ using System.Text;
 [Route("api/[controller]")]
 public class StudentsController : ControllerBase
 {
+    private readonly IFileService _fileService;
+
+    public StudentsController(IFileService fileService)
+    {
+        _fileService = fileService;
+    }
 
     [HttpPost("upload")]
     public async Task<IActionResult> UploadExcel(IFormFile file)
@@ -40,7 +47,8 @@ public class StudentsController : ControllerBase
 
             for (int row = 2; row <= rowCount; row++)
             {
-                var student = Utilites.MapRowToDto<StudentDto>(worksheet, row, images);
+                var student = Utilites.MapRowToDto<StudentDto>(worksheet, row, images, _fileService);
+
 
                 var context = new ValidationContext(student);
                 var validationResults = new List<ValidationResult>();

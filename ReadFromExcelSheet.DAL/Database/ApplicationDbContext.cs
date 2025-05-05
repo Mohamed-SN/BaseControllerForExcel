@@ -33,6 +33,7 @@ namespace ReadFromExcelSheet.DAL.Database
         public virtual DbSet<Company> Companies { get; set; }
         public virtual DbSet<Branch> Branches { get; set; }
         public virtual DbSet<Employee> Employees { get; set; }
+        public virtual DbSet<Student> Students { get; set; }
 
 
 

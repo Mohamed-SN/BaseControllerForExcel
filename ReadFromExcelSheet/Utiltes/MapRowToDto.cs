@@ -1,10 +1,12 @@
 ﻿using OfficeOpenXml;
+using OfficeOpenXml.Drawing;
+using ReadFromExcelSheet.BLL.Interface;
 
 namespace ReadFromExcelSheet.Utiltes
 {
     public static class Utilites
     {
-        public static T MapRowToDto<T>(ExcelWorksheet worksheet, int row, List<byte[]> images = null) where T : new()
+        public static T MapRowToDto<T>(ExcelWorksheet worksheet, int row, List<byte[]> images, IFileService fileService) where T : new()
         {
             var obj = new T();
             var props = typeof(T).GetProperties();
@@ -32,12 +34,20 @@ namespace ReadFromExcelSheet.Utiltes
                 }
                 else if (prop.PropertyType == typeof(byte[]) && prop.Name == "ProfilePicture")
                 {
-                    // Match image by row index (image[0] for row 2, image[1] for row 3, etc.)
                     int imageIndex = row - 2;
 
                     if (images != null && imageIndex >= 0 && imageIndex < images.Count)
                     {
-                        prop.SetValue(obj, images[imageIndex]);
+                        var imageBytes = images[imageIndex];
+
+                        // Save image to wwwroot/Students and get URL
+                        var fileName = Guid.NewGuid().ToString() + ".jpg";
+                        var imagePath = Path.Combine("wwwroot", "Students", fileName);
+                        Directory.CreateDirectory(Path.GetDirectoryName(imagePath));
+                        File.WriteAllBytes(imagePath, imageBytes); // save to disk
+
+                        // Convert to base64 and assign to property
+                        prop.SetValue(obj, imageBytes);
                     }
                     else
                     {
@@ -48,5 +58,7 @@ namespace ReadFromExcelSheet.Utiltes
 
             return obj;
         }
+
+
     }
 }
