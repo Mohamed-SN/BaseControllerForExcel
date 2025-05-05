@@ -2,68 +2,71 @@
 using OfficeOpenXml;
 using OfficeOpenXml.Drawing;
 using ReadFromExcelSheet.DTO;
+using ReadFromExcelSheet.Utilites;
 using ReadFromExcelSheet.Utiltes;
 using System.ComponentModel.DataAnnotations;
 using System.Text;
+
 
 [ApiController]
 [Route("api/[controller]")]
 public class StudentsController : ControllerBase
 {
+
     [HttpPost("upload")]
     public async Task<IActionResult> UploadExcel(IFormFile file)
     {
         if (file == null || file.Length == 0)
             return BadRequest("Invalid file.");
-        List<string> bugs = new List<string>();
 
+        List<string> bugs = new List<string>();
         var students = new List<StudentDto>();
 
-        using (var stream = new MemoryStream())
+        // Save the uploaded file temporarily to disk to allow OpenXML to open it
+        var tempFilePath = Path.GetTempFileName();
+        await using (var fs = new FileStream(tempFilePath, FileMode.Create, FileAccess.Write))
         {
-            await file.CopyToAsync(stream);
-            //chchxlxs
-            //if (file.ContentType == "")
-            //{
+            await file.CopyToAsync(fs);
+        }
 
-            //}
-            using (var package = new ExcelPackage(stream))
+        // Extract images in order using OpenXML
+        var images = ExcelImageExtractor.ExtractImagesByOrder(tempFilePath);
+
+        using (var stream = new MemoryStream(System.IO.File.ReadAllBytes(tempFilePath)))
+        using (var package = new ExcelPackage(stream))
+        {
+            var worksheet = package.Workbook.Worksheets[0];
+            var rowCount = worksheet.Dimension.Rows;
+
+            for (int row = 2; row <= rowCount; row++)
             {
-                var worksheet = package.Workbook.Worksheets[0];
-                var rowCount = worksheet.Dimension.Rows;
-                var pictures = worksheet.Drawings.OfType<ExcelPicture>().ToList();
+                var student = Utilites.MapRowToDto<StudentDto>(worksheet, row, images);
 
-                for (int row = 2; row <= rowCount; row++)
+                var context = new ValidationContext(student);
+                var validationResults = new List<ValidationResult>();
+                Validator.TryValidateObject(student, context, validationResults, true);
+
+                if (validationResults.Any())
                 {
-
-                    StudentDto student = Utilites.MapRowToDto<StudentDto>(worksheet, row, pictures);
-
-                    ValidationContext context = new ValidationContext(student);
-                    List<ValidationResult> validationResults = new List<ValidationResult>();
-                    Validator.TryValidateObject(student, context, validationResults, true);
-                    if (validationResults.Any())
-                    {
-
-                        StringBuilder bug = new StringBuilder($"row[{row}]");
-                        foreach (var ress in validationResults.Select(a => a.ErrorMessage).ToList())
-                            bug.Append(", " + ress);
-                        bugs.Add(bug.ToString());
-                    }
-
-
-                    students.Add((student));
+                    var bug = new StringBuilder($"row[{row}]");
+                    foreach (var error in validationResults.Select(v => v.ErrorMessage))
+                        bug.Append(", " + error);
+                    bugs.Add(bug.ToString());
                 }
+
+                students.Add(student);
             }
         }
 
+        System.IO.File.Delete(tempFilePath); // Clean up temp file
+
         if (bugs.Any())
-        {
             return Ok(bugs);
-        }
 
-
-        return Ok(students);
+        return Ok(new { students });
     }
+
+
     [HttpGet("template")]
     public IActionResult GetStudentTemplate()
     {
