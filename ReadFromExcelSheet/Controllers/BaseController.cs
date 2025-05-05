@@ -244,14 +244,17 @@ namespace ReadFromExcelSheet.Controllers
             }
         }
 
+        
         [HttpPost("upload")]
-        public async Task<IActionResult> UploadExcel(IFormFile file)  // Add the `new()` constraint
+        public async Task<IActionResult> UploadExcel(IFormFile file)
         {
+            dynamic repo = GetRepository();
+
             if (file == null || file.Length == 0)
                 return BadRequest("Invalid file.");
 
             var bugs = new List<string>();
-            var dtoList = new List<AddDto>();  // Generic DTO list
+            var dtoList = new List<AddDto>();
 
             // Save uploaded Excel file temporarily
             var tempFilePath = Path.GetTempFileName();
@@ -274,6 +277,28 @@ namespace ReadFromExcelSheet.Controllers
                     // Map data to DTO
                     var dto = Utiltes.Utilites.MapRowToDto<AddDto>(worksheet, row, images, _fileService);
 
+                    // Check for byte[] properties
+                    var imageProperties = dto.GetType().GetProperties()
+                        .Where(p => p.PropertyType == typeof(byte[]))
+                        .ToList();
+
+                    if (imageProperties.Any())
+                    {
+                        foreach (var prop in imageProperties)
+                        {
+                            var imageValue = (byte[])prop.GetValue(dto);
+                            if (imageValue != null && imageValue.Length > 0)
+                            {
+                                var fileName = await _fileService.SaveFileAsync(
+                                    imageValue,
+                                    ".jpg",
+                                    $"{typeof(Entity).Name}"
+                                );
+                                //prop.SetValue(dto, null); // Clear the byte[] after saving
+                            }
+                        }
+                    }
+
                     // Validate DTO data
                     var context = new ValidationContext(dto);
                     var validationResults = new List<ValidationResult>();
@@ -292,88 +317,56 @@ namespace ReadFromExcelSheet.Controllers
                 }
             }
 
-            System.IO.File.Delete(tempFilePath); // Cleanup temp file
+            System.IO.File.Delete(tempFilePath);
 
             if (dtoList.Count == 0)
                 return BadRequest("No valid data found to import.");
 
-            // Now handle the logic based on your DTO type (e.g., StudentDto in this case)
-            //if (typeof(AddDto) == typeof(StudentDto))
-            //{
-            //    var studentsToAdd = new List<Student>();
-            //    foreach (var dto in dtoList.Cast<StudentDto>())
-            //    {
-            //        string fileName = null;
-            //        if (dto.ProfilePicture != null && dto.ProfilePicture.Length > 0)
-            //        {
-            //            fileName = await _fileService.SaveFileAsync(dto.ProfilePicture, ".jpg", "Students");
-            //            var studentToAdd = mapper.Map<Student>(dto);
-            //            studentToAdd.ProfilePicture = fileName;
-            //            studentsToAdd.Add(studentToAdd);
-            //        }
-            //    }
-
-            //    var result = await unitOfWork.Students.SaveRange(studentsToAdd);
-            //    await unitOfWork.CompleteAsync();
-
-            //    if (result == null)
-            //        return StatusCode(500, "Failed to save students.");
-
-            //    if (bugs.Any())
-            //        return Ok(new { Message = "Imported with warnings", Errors = bugs });
-
-            //    return Ok(new { Message = "All students imported successfully", Students = studentsToAdd });
-            ////}
-            ///
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
             var entityToAdd = new List<Entity>();
             foreach (var dto in dtoList.Cast<AddDto>())
             {
-                string fileName = null;
-                if (dto.ProfilePicture != null && dto.ProfilePicture.Length > 0)
+                var entityItem = mapper.Map<Entity>(dto);
+
+                // Get the image properties from the DTO
+                var imageProperties = dto.GetType().GetProperties()
+                    .Where(p => p.PropertyType == typeof(byte[]))
+                    .ToList();
+
+                // Assign the saved file names to the entity
+                foreach (var prop in imageProperties)
                 {
-                    fileName = await _fileService.SaveFileAsync(dto.ProfilePicture, ".jpg", "Students");
-                    var entityItem = mapper.Map<Entity>(dto);
-                    entityItem.ProfilePicture = fileName;
-                    entityToAdd.Add(entityItem);
+                    var imageValue = (byte[])prop.GetValue(dto);
+                    if (imageValue != null && imageValue.Length > 0)
+                    {
+                        var fileName = await _fileService.SaveFileAsync(
+                            imageValue,
+                            ".jpg",
+                            $"{typeof(Entity).Name}"
+                        );
+
+                        // Get the corresponding property in the entity
+                        var entityProp = entityItem.GetType().GetProperty(prop.Name);
+                        if (entityProp != null)
+                        {
+                            entityProp.SetValue(entityItem, fileName);
+                        }
+                    }
                 }
+
+                entityToAdd.Add(entityItem);
             }
 
-            var result = await unitOfWork.Students.SaveRange(entityToAdd);
+            var result = await repo.SaveRange(entityToAdd);
             await unitOfWork.CompleteAsync();
 
             if (result == null)
-                return StatusCode(500, "Failed to save students.");
+                return StatusCode(500, $"Failed to save {typeof(Entity).Name}.");
 
             if (bugs.Any())
                 return Ok(new { Message = "Imported with warnings", Errors = bugs });
 
             return Ok(new { Message = $"All {typeof(Entity).Name} imported successfully", Entity = entityToAdd });
-
-            else
-            {
-                // Handle other DTO types dynamically
-                return BadRequest("Unsupported DTO type.");
-            }
         }
-
-
 
         [HttpGet("template")]
         public IActionResult GetTemplate()  // Generic method
@@ -382,7 +375,7 @@ namespace ReadFromExcelSheet.Controllers
             {
                 var worksheet = package.Workbook.Worksheets.Add(typeof(Entity).Name); // Use the type name dynamically
 
-                var properties = typeof(Entity).GetProperties(); // Get properties of the generic type
+                var properties = typeof(AddDto).GetProperties(); // Get properties of the generic type
 
                 // Set the header row dynamically
                 for (int i = 0; i < properties.Length; i++)
