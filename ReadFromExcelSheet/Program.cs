@@ -3,7 +3,9 @@ using OfficeOpenXml;
 using ReadFromExcelSheet.BLL.Helper;
 using ReadFromExcelSheet.BLL.Implementation;
 using ReadFromExcelSheet.BLL.Interface;
+using ReadFromExcelSheet.Configurations;
 using ReadFromExcelSheet.DAL.Database;
+using ReadFromExcelSheet.DAL.Extends;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -16,14 +18,15 @@ builder.Services.AddSwaggerGen();
 builder.Services.AddScoped<IFileService, FileService>();
 builder.Services.AddScoped<IStudentRepository, StudentRepository>();
 builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
-builder.Services.AddAutoMapper(typeof(DomainProfile));
+builder.Services.AddAutoMapper(typeof(DomainProfile).Assembly);
 ExcelPackage.LicenseContext = LicenseContext.NonCommercial;
 
 
 
 
-//builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
-//builder.Services.AddScoped(typeof(IBaseRepo<>), typeof(BaseRepo<>));
+builder.Services.AddLocalizationConfig();
+builder.Services.AddScoped(typeof(IBaseRepo<BaseEntity<int>,EntitySC,int>), typeof(BaseRepo<BaseEntity<int>, EntitySC, int>));
+
 
 
 
@@ -41,7 +44,7 @@ if (app.Environment.IsDevelopment())
     app.UseSwagger();
     app.UseSwaggerUI();
 }
-
+app.UseStaticFiles();
 app.UseHttpsRedirection();
 
 app.UseAuthorization();

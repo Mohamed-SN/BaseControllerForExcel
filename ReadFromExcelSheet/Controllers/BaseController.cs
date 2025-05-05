@@ -3,15 +3,22 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Localization;
 using Microsoft.OpenApi.Models;
+using OfficeOpenXml;
 using ReadFromExcelSheet.BLL.Helper;
+using ReadFromExcelSheet.BLL.Implementation;
 using ReadFromExcelSheet.BLL.Interface;
+using ReadFromExcelSheet.DAL.Entities;
 using ReadFromExcelSheet.DAL.Extends;
 using ReadFromExcelSheet.DTO;
 using ReadFromExcelSheet.Resources;
+using ReadFromExcelSheet.Utilites;
+using System.ComponentModel.DataAnnotations;
 using System.Diagnostics.Metrics;
 using System.Net;
+using System.Text;
 using System.Threading.Tasks;
 using System.Xml.Linq;
+
 
 namespace ReadFromExcelSheet.Controllers
 {
@@ -22,20 +29,22 @@ namespace ReadFromExcelSheet.Controllers
        where Entity : BaseEntity<IdType>
        where ReturnDto : class
        where ReturnWithDetailsDto : class
-       where AddDto : BaseDto<IdType>
+       where AddDto : class,new()
        where EditDto : BaseDto<IdType>
     {
         private readonly IUnitOfWork unitOfWork;
         private readonly IMapper mapper;
+        private readonly IFileService _fileService;
         private readonly IStringLocalizer<SharedResources> _localizer;
 
-        public BaseController(IUnitOfWork unitOfWork, IMapper mapper, IStringLocalizer<SharedResources> localizer)
+        public BaseController(IUnitOfWork unitOfWork, IMapper mapper, IFileService fileService , IStringLocalizer<SharedResources> localizer)
         {
             this.unitOfWork = unitOfWork;
             this.mapper = mapper;
+            _fileService = fileService;
             this._localizer = localizer;
         }
-
+       
         [HttpPost("Get")]
 
         public virtual async Task<IActionResult> Get(SC sc)
@@ -234,6 +243,164 @@ namespace ReadFromExcelSheet.Controllers
                         _localizer, null, new[] { e.Message }));
             }
         }
+
+        [HttpPost("upload")]
+        public async Task<IActionResult> UploadExcel(IFormFile file)  // Add the `new()` constraint
+        {
+            if (file == null || file.Length == 0)
+                return BadRequest("Invalid file.");
+
+            var bugs = new List<string>();
+            var dtoList = new List<AddDto>();  // Generic DTO list
+
+            // Save uploaded Excel file temporarily
+            var tempFilePath = Path.GetTempFileName();
+            await using (var fs = new FileStream(tempFilePath, FileMode.Create, FileAccess.Write))
+            {
+                await file.CopyToAsync(fs);
+            }
+
+            // Extract images from Excel using OpenXML
+            var images = ExcelImageExtractor.ExtractImagesByOrder(tempFilePath);
+
+            using (var stream = new MemoryStream(System.IO.File.ReadAllBytes(tempFilePath)))
+            using (var package = new ExcelPackage(stream))
+            {
+                var worksheet = package.Workbook.Worksheets[0];
+                var rowCount = worksheet.Dimension.Rows;
+
+                for (int row = 2; row <= rowCount; row++)
+                {
+                    // Map data to DTO
+                    var dto = Utiltes.Utilites.MapRowToDto<AddDto>(worksheet, row, images, _fileService);
+
+                    // Validate DTO data
+                    var context = new ValidationContext(dto);
+                    var validationResults = new List<ValidationResult>();
+                    Validator.TryValidateObject(dto, context, validationResults, true);
+
+                    if (validationResults.Any())
+                    {
+                        var bug = new StringBuilder($"row[{row}]");
+                        foreach (var error in validationResults.Select(v => v.ErrorMessage))
+                            bug.Append(", " + error);
+                        bugs.Add(bug.ToString());
+                        continue;
+                    }
+
+                    dtoList.Add(dto);
+                }
+            }
+
+            System.IO.File.Delete(tempFilePath); // Cleanup temp file
+
+            if (dtoList.Count == 0)
+                return BadRequest("No valid data found to import.");
+
+            // Now handle the logic based on your DTO type (e.g., StudentDto in this case)
+            //if (typeof(AddDto) == typeof(StudentDto))
+            //{
+            //    var studentsToAdd = new List<Student>();
+            //    foreach (var dto in dtoList.Cast<StudentDto>())
+            //    {
+            //        string fileName = null;
+            //        if (dto.ProfilePicture != null && dto.ProfilePicture.Length > 0)
+            //        {
+            //            fileName = await _fileService.SaveFileAsync(dto.ProfilePicture, ".jpg", "Students");
+            //            var studentToAdd = mapper.Map<Student>(dto);
+            //            studentToAdd.ProfilePicture = fileName;
+            //            studentsToAdd.Add(studentToAdd);
+            //        }
+            //    }
+
+            //    var result = await unitOfWork.Students.SaveRange(studentsToAdd);
+            //    await unitOfWork.CompleteAsync();
+
+            //    if (result == null)
+            //        return StatusCode(500, "Failed to save students.");
+
+            //    if (bugs.Any())
+            //        return Ok(new { Message = "Imported with warnings", Errors = bugs });
+
+            //    return Ok(new { Message = "All students imported successfully", Students = studentsToAdd });
+            ////}
+            ///
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+            var entityToAdd = new List<Entity>();
+            foreach (var dto in dtoList.Cast<AddDto>())
+            {
+                string fileName = null;
+                if (dto.ProfilePicture != null && dto.ProfilePicture.Length > 0)
+                {
+                    fileName = await _fileService.SaveFileAsync(dto.ProfilePicture, ".jpg", "Students");
+                    var entityItem = mapper.Map<Entity>(dto);
+                    entityItem.ProfilePicture = fileName;
+                    entityToAdd.Add(entityItem);
+                }
+            }
+
+            var result = await unitOfWork.Students.SaveRange(entityToAdd);
+            await unitOfWork.CompleteAsync();
+
+            if (result == null)
+                return StatusCode(500, "Failed to save students.");
+
+            if (bugs.Any())
+                return Ok(new { Message = "Imported with warnings", Errors = bugs });
+
+            return Ok(new { Message = $"All {typeof(Entity).Name} imported successfully", Entity = entityToAdd });
+
+            else
+            {
+                // Handle other DTO types dynamically
+                return BadRequest("Unsupported DTO type.");
+            }
+        }
+
+
+
+        [HttpGet("template")]
+        public IActionResult GetTemplate()  // Generic method
+        {
+            using (var package = new ExcelPackage())
+            {
+                var worksheet = package.Workbook.Worksheets.Add(typeof(Entity).Name); // Use the type name dynamically
+
+                var properties = typeof(Entity).GetProperties(); // Get properties of the generic type
+
+                // Set the header row dynamically
+                for (int i = 0; i < properties.Length; i++)
+                {
+                    worksheet.Cells[1, i + 1].Value = properties[i].Name;  // Assign property names as column headers
+                }
+
+                worksheet.Cells[worksheet.Dimension.Address].AutoFitColumns();
+
+                var excelBytes = package.GetAsByteArray();
+                var fileName = $"{typeof(Entity).Name}Template_{DateTime.Now:yyyyMMddHHmmss}.xlsx";
+
+                return File(excelBytes,
+                            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            fileName);
+            }
+        }
+
         internal dynamic GetRepository()
         {
 
@@ -241,8 +408,8 @@ namespace ReadFromExcelSheet.Controllers
             {
 
                 //#region Lookup
-                //case nameof(AttachmentCategory):
-                //    return unitOfWork.AttachmentCategoryBL;
+                case nameof(Student):
+                    return unitOfWork.Students;
                 //case nameof(AttendanceType):
                 //    return unitOfWork.AttendanceTypeBL;
                 //case nameof(Branch):

@@ -13,9 +13,19 @@ namespace ReadFromExcelSheet.BLL.Helper
     {
         public DomainProfile() 
         {
+            CreateMap<Student, ReturnStudentDto>()
+    .ForMember(dest => dest.ProfilePicture,
+        opt => opt.MapFrom(src => Convert.FromBase64String(src.ProfilePicture)));
+
+            CreateMap<ReturnStudentDto, Student>()
+                .ReverseMap();
+
             CreateMap<StudentDto, Student>()
                 .ForMember(dest => dest.ProfilePicture,
                            opt => opt.MapFrom(src => Convert.ToBase64String(src.ProfilePicture)));
+
+
+
 
         }
 
