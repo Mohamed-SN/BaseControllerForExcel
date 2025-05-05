@@ -17,8 +17,5 @@ namespace ReadFromExcelSheet.DAL.Entities
         public int BranchId { get; set; }
         public virtual Branch Branch { get; set; }
 
-
-
-
     }
 }
