@@ -1,5 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using OfficeOpenXml;
+using ReadFromExcelSheet.BLL.Helper;
+using ReadFromExcelSheet.BLL.Implementation;
 using ReadFromExcelSheet.BLL.Interface;
 using ReadFromExcelSheet.DAL.Database;
 
@@ -12,6 +14,9 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddScoped<IFileService, FileService>();
+builder.Services.AddScoped<IStudentRepository, StudentRepository>();
+builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
+builder.Services.AddAutoMapper(typeof(DomainProfile));
 ExcelPackage.LicenseContext = LicenseContext.NonCommercial;
 
 

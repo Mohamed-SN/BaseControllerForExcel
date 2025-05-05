@@ -21,4 +21,8 @@
     <ProjectReference Include="..\ReadFromExcelSheet.BLL\ReadFromExcelSheet.BLL.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Folder Include="wwwroot\" />
+  </ItemGroup>
+
 </Project>

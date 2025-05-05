@@ -1,7 +1,9 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using AutoMapper;
+using Microsoft.AspNetCore.Mvc;
 using OfficeOpenXml;
 using OfficeOpenXml.Drawing;
 using ReadFromExcelSheet.BLL.Interface;
+using ReadFromExcelSheet.DAL.Entities;
 using ReadFromExcelSheet.DTO;
 using ReadFromExcelSheet.Utilites;
 using ReadFromExcelSheet.Utiltes;
@@ -14,11 +16,82 @@ using System.Text;
 public class StudentsController : ControllerBase
 {
     private readonly IFileService _fileService;
+    private readonly IMapper _mapper;
+    private readonly IUnitOfWork _unitOfWork;
 
-    public StudentsController(IFileService fileService)
+    public StudentsController(IFileService fileService, IMapper mapper, IUnitOfWork unitOfWork)
     {
         _fileService = fileService;
+        _mapper = mapper;
+        _unitOfWork = unitOfWork;
     }
+
+    //[HttpPost("upload")]
+    //public async Task<IActionResult> UploadExcel(IFormFile file)
+    //{
+    //    if (file == null || file.Length == 0)
+    //        return BadRequest("Invalid file.");
+
+    //    List<string> bugs = new List<string>();
+    //    var students = new List<StudentDto>();
+    //    var studentToAdd = new List<Student>();
+
+    //    // Save the uploaded file temporarily to disk to allow OpenXML to open it
+    //    var tempFilePath = Path.GetTempFileName();
+    //    await using (var fs = new FileStream(tempFilePath, FileMode.Create, FileAccess.Write))
+    //    {
+    //        await file.CopyToAsync(fs);
+    //    }
+
+    //    // Extract images in order using OpenXML
+    //    var images = ExcelImageExtractor.ExtractImagesByOrder(tempFilePath);
+
+    //    using (var stream = new MemoryStream(System.IO.File.ReadAllBytes(tempFilePath)))
+    //    using (var package = new ExcelPackage(stream))
+    //    {
+    //        var worksheet = package.Workbook.Worksheets[0];
+    //        var rowCount = worksheet.Dimension.Rows;
+
+    //        for (int row = 2; row <= rowCount; row++)
+    //        {
+    //            var student = Utilites.MapRowToDto<StudentDto>(worksheet, row, images, _fileService);
+
+
+    //            var context = new ValidationContext(student);
+    //            var validationResults = new List<ValidationResult>();
+    //            Validator.TryValidateObject(student, context, validationResults, true);
+
+    //            if (validationResults.Any())
+    //            {
+    //                var bug = new StringBuilder($"row[{row}]");
+    //                foreach (var error in validationResults.Select(v => v.ErrorMessage))
+    //                    bug.Append(", " + error);
+    //                bugs.Add(bug.ToString());
+    //            }
+
+    //            students.Add(student);
+
+    //             studentToAdd = _mapper.Map<List<Student>>(students);
+
+    //            var result = await _unitOfWork.Students.SaveRange(studentToAdd);
+    //            await _unitOfWork.CompleteAsync();
+    //            if (result == null)
+    //            {
+    //                bugs.Add($"Failed to save student at row {row}");
+    //            }
+
+    //        }
+    //    }
+
+    //    System.IO.File.Delete(tempFilePath); // Clean up temp file
+
+    //    if (bugs.Any())
+    //        return Ok(bugs);
+
+    //    //return Ok(new { students });
+    //    return Ok(studentToAdd);
+    //}
+
 
     [HttpPost("upload")]
     public async Task<IActionResult> UploadExcel(IFormFile file)
@@ -26,17 +99,17 @@ public class StudentsController : ControllerBase
         if (file == null || file.Length == 0)
             return BadRequest("Invalid file.");
 
-        List<string> bugs = new List<string>();
-        var students = new List<StudentDto>();
+        var bugs = new List<string>();
+        var studentsDto = new List<StudentDto>();
 
-        // Save the uploaded file temporarily to disk to allow OpenXML to open it
+        // Save uploaded Excel file temporarily
         var tempFilePath = Path.GetTempFileName();
         await using (var fs = new FileStream(tempFilePath, FileMode.Create, FileAccess.Write))
         {
             await file.CopyToAsync(fs);
         }
 
-        // Extract images in order using OpenXML
+        // Extract images from Excel using OpenXML
         var images = ExcelImageExtractor.ExtractImagesByOrder(tempFilePath);
 
         using (var stream = new MemoryStream(System.IO.File.ReadAllBytes(tempFilePath)))
@@ -47,12 +120,12 @@ public class StudentsController : ControllerBase
 
             for (int row = 2; row <= rowCount; row++)
             {
-                var student = Utilites.MapRowToDto<StudentDto>(worksheet, row, images, _fileService);
+                var studentDto = Utilites.MapRowToDto<StudentDto>(worksheet, row, images, _fileService);
 
-
-                var context = new ValidationContext(student);
+                // Validate student data
+                var context = new ValidationContext(studentDto);
                 var validationResults = new List<ValidationResult>();
-                Validator.TryValidateObject(student, context, validationResults, true);
+                Validator.TryValidateObject(studentDto, context, validationResults, true);
 
                 if (validationResults.Any())
                 {
@@ -60,19 +133,54 @@ public class StudentsController : ControllerBase
                     foreach (var error in validationResults.Select(v => v.ErrorMessage))
                         bug.Append(", " + error);
                     bugs.Add(bug.ToString());
+                    continue;
                 }
 
-                students.Add(student);
+                studentsDto.Add(studentDto);
             }
         }
 
-        System.IO.File.Delete(tempFilePath); // Clean up temp file
+        System.IO.File.Delete(tempFilePath); // Cleanup temp file
+
+        if (studentsDto.Count == 0)
+            return BadRequest("No valid data found to import.");
+
+        // Convert DTOs to Student entities and save images to disk
+        var studentsToAdd = new List<Student>();
+
+        foreach (var dto in studentsDto)
+        {
+            string fileName = null;
+
+            if (dto.ProfilePicture != null && dto.ProfilePicture.Length > 0)
+            {
+                fileName = $"{Guid.NewGuid()}.jpg";
+                var imagePath = Path.Combine("wwwroot", "Students", fileName);
+                Directory.CreateDirectory(Path.GetDirectoryName(imagePath));
+                await System.IO.File.WriteAllBytesAsync(imagePath, dto.ProfilePicture);
+            }
+
+            studentsToAdd.Add(new Student
+            {
+                Name = dto.Name,
+                Age = dto.Age,
+                Email = dto.Email,
+                ProfilePicture = fileName 
+            });
+        }
+
+        var result = await _unitOfWork.Students.SaveRange(studentsToAdd);
+        await _unitOfWork.CompleteAsync();
+
+        if (result == null)
+            return StatusCode(500, "Failed to save students.");
 
         if (bugs.Any())
-            return Ok(bugs);
+            return Ok(new { Message = "Imported with warnings", Errors = bugs });
 
-        return Ok(new { students });
+        return Ok(new { Message = "All students imported successfully", Students = studentsToAdd });
     }
+
 
 
     [HttpGet("template")]

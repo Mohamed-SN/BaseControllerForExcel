@@ -10,6 +10,7 @@ namespace ReadFromExcelSheet.BLL.Interface
     {
 
 
+        public IStudentRepository Students { get;  set; }
 
 
 

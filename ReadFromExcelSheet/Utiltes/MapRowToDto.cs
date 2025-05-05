@@ -39,15 +39,7 @@ namespace ReadFromExcelSheet.Utiltes
                     if (images != null && imageIndex >= 0 && imageIndex < images.Count)
                     {
                         var imageBytes = images[imageIndex];
-
-                        // Save image to wwwroot/Students and get URL
-                        var fileName = Guid.NewGuid().ToString() + ".jpg";
-                        var imagePath = Path.Combine("wwwroot", "Students", fileName);
-                        Directory.CreateDirectory(Path.GetDirectoryName(imagePath));
-                        File.WriteAllBytes(imagePath, imageBytes); // save to disk
-
-                        // Convert to base64 and assign to property
-                        prop.SetValue(obj, imageBytes);
+                        prop.SetValue(obj, imageBytes); // just assign the byte[] here
                     }
                     else
                     {
@@ -58,6 +50,7 @@ namespace ReadFromExcelSheet.Utiltes
 
             return obj;
         }
+
 
 
     }

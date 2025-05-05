@@ -13,7 +13,10 @@ namespace ReadFromExcelSheet.BLL.Helper
     {
         public DomainProfile() 
         {
-            CreateMap<StudentDto, Student>();
+            CreateMap<StudentDto, Student>()
+                .ForMember(dest => dest.ProfilePicture,
+                           opt => opt.MapFrom(src => Convert.ToBase64String(src.ProfilePicture)));
+
         }
 
     }
