@@ -6,7 +6,8 @@ namespace ReadFromExcelSheet.Utiltes
 {
     public static class Utilites
     {
-        public static T MapRowToDto<T>(ExcelWorksheet worksheet, int row, List<byte[]> images, IFileService fileService) where T : new()
+
+        public static T MapRowToDto<T>(ExcelWorksheet worksheet, int row, List<byte[]> images, IFileService fileService) where T :class, new()
         {
             var obj = new T();
             var props = typeof(T).GetProperties();
@@ -34,12 +35,13 @@ namespace ReadFromExcelSheet.Utiltes
                 }
                 else if (prop.PropertyType == typeof(byte[]) && prop.Name == "ProfilePicture")
                 {
-                    int imageIndex = row - 2;
+                    // Assuming that the image is stored in the 'images' list corresponding to the row number
+                    int imageIndex = row - 2; // Image index is based on row number (adjust if needed)
 
                     if (images != null && imageIndex >= 0 && imageIndex < images.Count)
                     {
-                        var imageBytes = images[imageIndex];
-                        prop.SetValue(obj, imageBytes); // just assign the byte[] here
+                        var imageBytes = images[imageIndex]; // Use the byte[] image
+                        prop.SetValue(obj, imageBytes); // Assign the byte[] to the property
                     }
                     else
                     {
@@ -50,7 +52,6 @@ namespace ReadFromExcelSheet.Utiltes
 
             return obj;
         }
-
 
 
     }

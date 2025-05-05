@@ -3,15 +3,22 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Localization;
 using Microsoft.OpenApi.Models;
+using OfficeOpenXml;
 using ReadFromExcelSheet.BLL.Helper;
+using ReadFromExcelSheet.BLL.Implementation;
 using ReadFromExcelSheet.BLL.Interface;
+using ReadFromExcelSheet.DAL.Entities;
 using ReadFromExcelSheet.DAL.Extends;
 using ReadFromExcelSheet.DTO;
 using ReadFromExcelSheet.Resources;
+using ReadFromExcelSheet.Utilites;
+using System.ComponentModel.DataAnnotations;
 using System.Diagnostics.Metrics;
 using System.Net;
+using System.Text;
 using System.Threading.Tasks;
 using System.Xml.Linq;
+
 
 namespace ReadFromExcelSheet.Controllers
 {
@@ -22,218 +29,139 @@ namespace ReadFromExcelSheet.Controllers
        where Entity : BaseEntity<IdType>
        where ReturnDto : class
        where ReturnWithDetailsDto : class
-       where AddDto : BaseDto<IdType>
+       where AddDto : class,new()
        where EditDto : BaseDto<IdType>
     {
         private readonly IUnitOfWork unitOfWork;
         private readonly IMapper mapper;
+        private readonly IFileService _fileService;
         private readonly IStringLocalizer<SharedResources> _localizer;
 
-        public BaseController(IUnitOfWork unitOfWork, IMapper mapper, IStringLocalizer<SharedResources> localizer)
+        public BaseController(IUnitOfWork unitOfWork, IMapper mapper, IFileService fileService , IStringLocalizer<SharedResources> localizer)
         {
             this.unitOfWork = unitOfWork;
             this.mapper = mapper;
+            _fileService = fileService;
             this._localizer = localizer;
-        }
+        } 
 
-        [HttpPost("Get")]
-
-        public virtual async Task<IActionResult> Get(SC sc)
+        [HttpPost("upload")]
+        public async Task<IActionResult> UploadExcel(IFormFile file)  // Add the `new()` constraint
         {
-            string? CompanyId = User.FindFirst("CompanyId")?.Value.ToString();
-            sc.CompanyId = !string.IsNullOrEmpty(CompanyId) ? short.Parse(CompanyId) : null;
+            if (file == null || file.Length == 0)
+                return BadRequest("Invalid file.");
 
-            //UserDto? userDto = await authService.GetCurrentUser(User.FindFirst(ClaimTypes.Email)?.Value ?? "");
-            try
+            var bugs = new List<string>();
+            var dtoList = new List<object>();  // Generic DTO list
+
+            // Save uploaded Excel file temporarily
+            var tempFilePath = Path.GetTempFileName();
+            await using (var fs = new FileStream(tempFilePath, FileMode.Create, FileAccess.Write))
             {
-                dynamic repo = GetRepository();
-                var res = await repo.GetAll(sc);
+                await file.CopyToAsync(fs);
+            }
 
+            // Extract images from Excel using OpenXML
+            var images = ExcelImageExtractor.ExtractImagesByOrder(tempFilePath);
 
-                if (sc.WithDetails)
+            using (var stream = new MemoryStream(System.IO.File.ReadAllBytes(tempFilePath)))
+            using (var package = new ExcelPackage(stream))
+            {
+                var worksheet = package.Workbook.Worksheets[0];
+                var rowCount = worksheet.Dimension.Rows;
+
+                for (int row = 2; row <= rowCount; row++)
                 {
-                    var data = new Pagination<ReturnWithDetailsDto>
+                    // Map data to DTO
+                    var dto = Utiltes.Utilites.MapRowToDto<AddDto>(worksheet, row, images, _fileService);
+
+                    // Validate DTO data
+                    var context = new ValidationContext(dto);
+                    var validationResults = new List<ValidationResult>();
+                    Validator.TryValidateObject(dto, context, validationResults, true);
+
+                    if (validationResults.Any())
                     {
-                        PageIndex = res.PageIndex,
-                        PageSize = res.PageSize,
-                        TotalRows = res.TotalRows,
-                        TotalPages = res.TotalPages,
-                        List = mapper.Map<List<ReturnWithDetailsDto>>(res.List)
-                    };
+                        var bug = new StringBuilder($"row[{row}]");
+                        foreach (var error in validationResults.Select(v => v.ErrorMessage))
+                            bug.Append(", " + error);
+                        bugs.Add(bug.ToString());
+                        continue;
+                    }
 
-                    return Ok(new ApiResponse<Pagination<ReturnWithDetailsDto>>(
-                        HttpStatusCode.OK,
-                        SharedResources.Success,
-                        _localizer,
-                        data
-                    ));
-
+                    dtoList.Add(dto);
                 }
-                else
+            }
+
+            System.IO.File.Delete(tempFilePath); // Cleanup temp file
+
+            if (dtoList.Count == 0)
+                return BadRequest("No valid data found to import.");
+
+            // Now handle the logic based on your DTO type (e.g., StudentDto in this case)
+            if (typeof(AddDto) == typeof(StudentDto))
+            {
+                var studentsToAdd = new List<Student>();
+                foreach (var dto in dtoList.Cast<StudentDto>())
                 {
-
-                    Pagination<ReturnDto> data = new Pagination<ReturnDto>()
+                    string fileName = null;
+                    if (dto.ProfilePicture != null && dto.ProfilePicture.Length > 0)
                     {
-                        PageIndex = res.PageIndex,
-                        PageSize = res.PageSize,
-                        TotalRows = res.TotalRows,
-                        TotalPages = res.TotalPages,
-                        List = mapper.Map<List<ReturnDto>>(res.List)
-                    };
-                    return Ok(new ApiResponse<Pagination<ReturnDto>>(HttpStatusCode.OK, SharedResources.Success,
-                            _localizer, data));
+                        fileName = await _fileService.SaveFileAsync(dto.ProfilePicture, ".jpg", "Students");
+                        var studentToAdd = mapper.Map<Student>(dto);
+                        studentToAdd.ProfilePicture = fileName;
+                        studentsToAdd.Add(studentToAdd);
+                    }
                 }
-            }
-            catch (Exception e)
-            {
-                return BadRequest(new ApiResponse<Entity?>(HttpStatusCode.BadRequest, SharedResources.FailedToGetData,
-                        _localizer, null, new[] { e.Message }));
-            }
-        }
 
-
-        [HttpPost("Add")]
-        public virtual async Task<IActionResult> Add(AddDto dto)
-        {
-            dynamic repo = GetRepository();
-            try
-            {
-                Entity data = mapper.Map<Entity>(dto);
-                var res = await repo.Add(data);
+                var result = await unitOfWork.Students.SaveRange(studentsToAdd);
                 await unitOfWork.CompleteAsync();
 
-                return Ok(new ApiResponse<ReturnDto>(HttpStatusCode.OK, SharedResources.AddedSuccessfuly,
-                        _localizer, mapper.Map<ReturnDto>(res)));
+                if (result == null)
+                    return StatusCode(500, "Failed to save students.");
+
+                if (bugs.Any())
+                    return Ok(new { Message = "Imported with warnings", Errors = bugs });
+
+                return Ok(new { Message = "All students imported successfully", Students = studentsToAdd });
             }
-            catch (Exception e)
+            else
             {
-                return BadRequest(new ApiResponse<Entity?>(HttpStatusCode.BadRequest, SharedResources.AddFailed,
-                        _localizer, null, new[] { e.InnerException?.Message ?? e.Message }));
-
+                // Handle other DTO types dynamically
+                return BadRequest("Unsupported DTO type.");
             }
-
         }
 
-        [HttpPost("Edit")]
-        public virtual async Task<IActionResult> Edit(EditDto dto)
-        {
-            dynamic repo = GetRepository();
-            try
-            {
-                Entity? data = await repo.Get(dto.Id);
-                if (data is null)
-                    return NotFound(new ApiResponse<Entity?>(HttpStatusCode.NotFound, SharedResources.NotFound,
-                        _localizer, null, new[] { $"Object with this id Not Found" }));
 
-                data = mapper.Map<Entity>(dto);
-                var res = await repo.Edit(data);
-                await unitOfWork.CompleteAsync();
-                return Ok(new ApiResponse<ReturnDto>(HttpStatusCode.OK, SharedResources.Updated,
-                        _localizer, mapper.Map<ReturnDto>(res)));
-            }
-            catch (Exception e)
-            {
-                return BadRequest(new ApiResponse<Entity?>(HttpStatusCode.BadRequest, SharedResources.UpdateFailed,
-                        _localizer, null, new[] { e.Message }));
-
-            }
-
-        }
-        [HttpPost("Delete/{id}/{CompanyId}")]
-        public async Task<IActionResult> Delete(IdType id, short CompanyId)
-        {
-            dynamic repo = GetRepository();
-
-            try
-            {
-                Entity? data = await repo.Delete(id);
-                if (data is null)
-                    return NotFound(new ApiResponse<Entity?>(HttpStatusCode.NotFound, SharedResources.NotFound,
-                        _localizer, null, new[] { "Not Found" }));
-
-                await unitOfWork.CompleteAsync();
-                return Ok(new ApiResponse<ReturnDto>(HttpStatusCode.OK, SharedResources.Deleted,
-                        _localizer, mapper.Map<ReturnDto>(data)));
-            }
-            catch (Exception e)
-            {
-                return BadRequest(new ApiResponse<Entity?>(HttpStatusCode.BadRequest, SharedResources.DeletedFailed,
-                        _localizer, null, new[] { e.Message }));
-
-            }
-
-
-        }
-
-        [HttpPost("Activate/{id}/{CompanyId}")]
-        public async Task<IActionResult> Activate(IdType id, short CompanyId)
-        {
-            dynamic repo = GetRepository();
-
-            try
-            {
-                Entity? data = await repo.Activate(id);
-                if (data is null)
-                    return NotFound(new ApiResponse<Entity?>(HttpStatusCode.NotFound, SharedResources.NotFound,
-                        _localizer, null, new[] { "Not Found" }));
-
-                await unitOfWork.CompleteAsync();
-                return Ok(new ApiResponse<ReturnDto>(HttpStatusCode.OK, SharedResources.ActivateSuccess,
-                        _localizer, mapper.Map<ReturnDto>(data)));
-            }
-            catch (Exception e)
-            {
-                return BadRequest(new ApiResponse<Entity?>(HttpStatusCode.BadRequest, SharedResources.ActivateFailed,
-                        _localizer, null, new[] { e.Message }));
-
-            }
-
-
-        }
-
-        [HttpPost("DeActivate/{id}/{CompanyId}")]
-        public async Task<IActionResult> DeActivate(IdType id, short CompanyId)
-        {
-            dynamic repo = GetRepository();
-
-            try
-            {
-                Entity? data = await repo.DeActivate(id);
-                if (data is null)
-                    return NotFound(new ApiResponse<Entity?>(HttpStatusCode.NotFound, SharedResources.NotFound,
-                        _localizer, null, new[] { "Not Found" }));
-
-                await unitOfWork.CompleteAsync();
-                return Ok(new ApiResponse<ReturnDto>(HttpStatusCode.OK, SharedResources.DeActivate,
-                        _localizer, mapper.Map<ReturnDto>(data)));
-            }
-            catch (Exception e)
-            {
-                return BadRequest(new ApiResponse<Entity?>(HttpStatusCode.BadRequest, SharedResources.DeActivateFailed,
-                        _localizer, null, new[] { e.Message }));
-
-            }
-
-
-        }
-
-        [HttpPost("Count")]
-        public virtual async Task<IActionResult> Count(SuperAdminFilter sc)
+        [HttpGet("template")]
+        public IActionResult GetStudentTemplate()
         {
 
-            try
+            using (var package = new ExcelPackage())
             {
-                dynamic repo = GetRepository();
-                int count = await repo.Count(sc);
-                return Ok(new ApiResponse<int>(HttpStatusCode.OK, SharedResources.Success,
-                        _localizer, count));
-            }
-            catch (Exception e)
-            {
-                return BadRequest(new ApiResponse<int?>(HttpStatusCode.BadRequest, SharedResources.CountFailed,
-                        _localizer, null, new[] { e.Message }));
+                var worksheet = package.Workbook.Worksheets.Add("Students");
+
+                worksheet.Cells[1, 1].Value = "Name";
+                worksheet.Cells[1, 2].Value = "Age";
+                worksheet.Cells[1, 3].Value = "Email";
+                worksheet.Cells[1, 4].Value = "ProfilePicture";
+
+                //worksheet.Cells[2, 1].Value = "Jane Doe";
+                //worksheet.Cells[2, 2].Value = 22;
+                //worksheet.Cells[2, 3].Value = "jane.doe@example.com";
+                //worksheet.Cells[2, 4].Value = "ImageHere";
+
+                worksheet.Cells[worksheet.Dimension.Address].AutoFitColumns();
+
+                var excelBytes = package.GetAsByteArray();
+                var fileName = $"StudentTemplate_{DateTime.Now:yyyyMMddHHmmss}.xlsx";
+
+                return File(excelBytes,
+                            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            fileName);
             }
         }
+
         internal dynamic GetRepository()
         {
 
@@ -241,8 +169,8 @@ namespace ReadFromExcelSheet.Controllers
             {
 
                 //#region Lookup
-                //case nameof(AttachmentCategory):
-                //    return unitOfWork.AttachmentCategoryBL;
+                case nameof(Student):
+                    return unitOfWork.Students;
                 //case nameof(AttendanceType):
                 //    return unitOfWork.AttendanceTypeBL;
                 //case nameof(Branch):

@@ -7,7 +7,7 @@ using System.Threading.Tasks;
 
 namespace ReadFromExcelSheet.DTO
 {
-    public class StudentDto
+    public class StudentDto :BaseDto<int>
     {
         [Required]
         public string Name { get; set; }
