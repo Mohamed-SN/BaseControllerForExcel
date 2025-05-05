@@ -43,7 +43,206 @@ namespace ReadFromExcelSheet.Controllers
             this.mapper = mapper;
             _fileService = fileService;
             this._localizer = localizer;
-        } 
+        }
+       
+        [HttpPost("Get")]
+
+        public virtual async Task<IActionResult> Get(SC sc)
+        {
+            string? CompanyId = User.FindFirst("CompanyId")?.Value.ToString();
+            sc.CompanyId = !string.IsNullOrEmpty(CompanyId) ? short.Parse(CompanyId) : null;
+
+            //UserDto? userDto = await authService.GetCurrentUser(User.FindFirst(ClaimTypes.Email)?.Value ?? "");
+            try
+            {
+                dynamic repo = GetRepository();
+                var res = await repo.GetAll(sc);
+
+
+                if (sc.WithDetails)
+                {
+                    var data = new Pagination<ReturnWithDetailsDto>
+                    {
+                        PageIndex = res.PageIndex,
+                        PageSize = res.PageSize,
+                        TotalRows = res.TotalRows,
+                        TotalPages = res.TotalPages,
+                        List = mapper.Map<List<ReturnWithDetailsDto>>(res.List)
+                    };
+
+                    return Ok(new ApiResponse<Pagination<ReturnWithDetailsDto>>(
+                        HttpStatusCode.OK,
+                        SharedResources.Success,
+                        _localizer,
+                        data
+                    ));
+
+                }
+                else
+                {
+
+                    Pagination<ReturnDto> data = new Pagination<ReturnDto>()
+                    {
+                        PageIndex = res.PageIndex,
+                        PageSize = res.PageSize,
+                        TotalRows = res.TotalRows,
+                        TotalPages = res.TotalPages,
+                        List = mapper.Map<List<ReturnDto>>(res.List)
+                    };
+                    return Ok(new ApiResponse<Pagination<ReturnDto>>(HttpStatusCode.OK, SharedResources.Success,
+                            _localizer, data));
+                }
+            }
+            catch (Exception e)
+            {
+                return BadRequest(new ApiResponse<Entity?>(HttpStatusCode.BadRequest, SharedResources.FailedToGetData,
+                        _localizer, null, new[] { e.Message }));
+            }
+        }
+
+
+        [HttpPost("Add")]
+        public virtual async Task<IActionResult> Add(AddDto dto)
+        {
+            dynamic repo = GetRepository();
+            try
+            {
+                Entity data = mapper.Map<Entity>(dto);
+                var res = await repo.Add(data);
+                await unitOfWork.CompleteAsync();
+
+                return Ok(new ApiResponse<ReturnDto>(HttpStatusCode.OK, SharedResources.AddedSuccessfuly,
+                        _localizer, mapper.Map<ReturnDto>(res)));
+            }
+            catch (Exception e)
+            {
+                return BadRequest(new ApiResponse<Entity?>(HttpStatusCode.BadRequest, SharedResources.AddFailed,
+                        _localizer, null, new[] { e.InnerException?.Message ?? e.Message }));
+
+            }
+
+        }
+
+        [HttpPost("Edit")]
+        public virtual async Task<IActionResult> Edit(EditDto dto)
+        {
+            dynamic repo = GetRepository();
+            try
+            {
+                Entity? data = await repo.Get(dto.Id);
+                if (data is null)
+                    return NotFound(new ApiResponse<Entity?>(HttpStatusCode.NotFound, SharedResources.NotFound,
+                        _localizer, null, new[] { $"Object with this id Not Found" }));
+
+                data = mapper.Map<Entity>(dto);
+                var res = await repo.Edit(data);
+                await unitOfWork.CompleteAsync();
+                return Ok(new ApiResponse<ReturnDto>(HttpStatusCode.OK, SharedResources.Updated,
+                        _localizer, mapper.Map<ReturnDto>(res)));
+            }
+            catch (Exception e)
+            {
+                return BadRequest(new ApiResponse<Entity?>(HttpStatusCode.BadRequest, SharedResources.UpdateFailed,
+                        _localizer, null, new[] { e.Message }));
+
+            }
+
+        }
+        [HttpPost("Delete/{id}/{CompanyId}")]
+        public async Task<IActionResult> Delete(IdType id, short CompanyId)
+        {
+            dynamic repo = GetRepository();
+
+            try
+            {
+                Entity? data = await repo.Delete(id);
+                if (data is null)
+                    return NotFound(new ApiResponse<Entity?>(HttpStatusCode.NotFound, SharedResources.NotFound,
+                        _localizer, null, new[] { "Not Found" }));
+
+                await unitOfWork.CompleteAsync();
+                return Ok(new ApiResponse<ReturnDto>(HttpStatusCode.OK, SharedResources.Deleted,
+                        _localizer, mapper.Map<ReturnDto>(data)));
+            }
+            catch (Exception e)
+            {
+                return BadRequest(new ApiResponse<Entity?>(HttpStatusCode.BadRequest, SharedResources.DeletedFailed,
+                        _localizer, null, new[] { e.Message }));
+
+            }
+
+
+        }
+
+        [HttpPost("Activate/{id}/{CompanyId}")]
+        public async Task<IActionResult> Activate(IdType id, short CompanyId)
+        {
+            dynamic repo = GetRepository();
+
+            try
+            {
+                Entity? data = await repo.Activate(id);
+                if (data is null)
+                    return NotFound(new ApiResponse<Entity?>(HttpStatusCode.NotFound, SharedResources.NotFound,
+                        _localizer, null, new[] { "Not Found" }));
+
+                await unitOfWork.CompleteAsync();
+                return Ok(new ApiResponse<ReturnDto>(HttpStatusCode.OK, SharedResources.ActivateSuccess,
+                        _localizer, mapper.Map<ReturnDto>(data)));
+            }
+            catch (Exception e)
+            {
+                return BadRequest(new ApiResponse<Entity?>(HttpStatusCode.BadRequest, SharedResources.ActivateFailed,
+                        _localizer, null, new[] { e.Message }));
+
+            }
+
+
+        }
+
+        [HttpPost("DeActivate/{id}/{CompanyId}")]
+        public async Task<IActionResult> DeActivate(IdType id, short CompanyId)
+        {
+            dynamic repo = GetRepository();
+
+            try
+            {
+                Entity? data = await repo.DeActivate(id);
+                if (data is null)
+                    return NotFound(new ApiResponse<Entity?>(HttpStatusCode.NotFound, SharedResources.NotFound,
+                        _localizer, null, new[] { "Not Found" }));
+
+                await unitOfWork.CompleteAsync();
+                return Ok(new ApiResponse<ReturnDto>(HttpStatusCode.OK, SharedResources.DeActivate,
+                        _localizer, mapper.Map<ReturnDto>(data)));
+            }
+            catch (Exception e)
+            {
+                return BadRequest(new ApiResponse<Entity?>(HttpStatusCode.BadRequest, SharedResources.DeActivateFailed,
+                        _localizer, null, new[] { e.Message }));
+
+            }
+
+
+        }
+
+        [HttpPost("Count")]
+        public virtual async Task<IActionResult> Count(SuperAdminFilter sc)
+        {
+
+            try
+            {
+                dynamic repo = GetRepository();
+                int count = await repo.Count(sc);
+                return Ok(new ApiResponse<int>(HttpStatusCode.OK, SharedResources.Success,
+                        _localizer, count));
+            }
+            catch (Exception e)
+            {
+                return BadRequest(new ApiResponse<int?>(HttpStatusCode.BadRequest, SharedResources.CountFailed,
+                        _localizer, null, new[] { e.Message }));
+            }
+        }
 
         [HttpPost("upload")]
         public async Task<IActionResult> UploadExcel(IFormFile file)  // Add the `new()` constraint
@@ -52,7 +251,7 @@ namespace ReadFromExcelSheet.Controllers
                 return BadRequest("Invalid file.");
 
             var bugs = new List<string>();
-            var dtoList = new List<object>();  // Generic DTO list
+            var dtoList = new List<AddDto>();  // Generic DTO list
 
             // Save uploaded Excel file temporarily
             var tempFilePath = Path.GetTempFileName();
@@ -99,32 +298,74 @@ namespace ReadFromExcelSheet.Controllers
                 return BadRequest("No valid data found to import.");
 
             // Now handle the logic based on your DTO type (e.g., StudentDto in this case)
-            if (typeof(AddDto) == typeof(StudentDto))
+            //if (typeof(AddDto) == typeof(StudentDto))
+            //{
+            //    var studentsToAdd = new List<Student>();
+            //    foreach (var dto in dtoList.Cast<StudentDto>())
+            //    {
+            //        string fileName = null;
+            //        if (dto.ProfilePicture != null && dto.ProfilePicture.Length > 0)
+            //        {
+            //            fileName = await _fileService.SaveFileAsync(dto.ProfilePicture, ".jpg", "Students");
+            //            var studentToAdd = mapper.Map<Student>(dto);
+            //            studentToAdd.ProfilePicture = fileName;
+            //            studentsToAdd.Add(studentToAdd);
+            //        }
+            //    }
+
+            //    var result = await unitOfWork.Students.SaveRange(studentsToAdd);
+            //    await unitOfWork.CompleteAsync();
+
+            //    if (result == null)
+            //        return StatusCode(500, "Failed to save students.");
+
+            //    if (bugs.Any())
+            //        return Ok(new { Message = "Imported with warnings", Errors = bugs });
+
+            //    return Ok(new { Message = "All students imported successfully", Students = studentsToAdd });
+            ////}
+            ///
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+            var entityToAdd = new List<Entity>();
+            foreach (var dto in dtoList.Cast<AddDto>())
             {
-                var studentsToAdd = new List<Student>();
-                foreach (var dto in dtoList.Cast<StudentDto>())
+                string fileName = null;
+                if (dto.ProfilePicture != null && dto.ProfilePicture.Length > 0)
                 {
-                    string fileName = null;
-                    if (dto.ProfilePicture != null && dto.ProfilePicture.Length > 0)
-                    {
-                        fileName = await _fileService.SaveFileAsync(dto.ProfilePicture, ".jpg", "Students");
-                        var studentToAdd = mapper.Map<Student>(dto);
-                        studentToAdd.ProfilePicture = fileName;
-                        studentsToAdd.Add(studentToAdd);
-                    }
+                    fileName = await _fileService.SaveFileAsync(dto.ProfilePicture, ".jpg", "Students");
+                    var entityItem = mapper.Map<Entity>(dto);
+                    entityItem.ProfilePicture = fileName;
+                    entityToAdd.Add(entityItem);
                 }
-
-                var result = await unitOfWork.Students.SaveRange(studentsToAdd);
-                await unitOfWork.CompleteAsync();
-
-                if (result == null)
-                    return StatusCode(500, "Failed to save students.");
-
-                if (bugs.Any())
-                    return Ok(new { Message = "Imported with warnings", Errors = bugs });
-
-                return Ok(new { Message = "All students imported successfully", Students = studentsToAdd });
             }
+
+            var result = await unitOfWork.Students.SaveRange(entityToAdd);
+            await unitOfWork.CompleteAsync();
+
+            if (result == null)
+                return StatusCode(500, "Failed to save students.");
+
+            if (bugs.Any())
+                return Ok(new { Message = "Imported with warnings", Errors = bugs });
+
+            return Ok(new { Message = $"All {typeof(Entity).Name} imported successfully", Entity = entityToAdd });
+
             else
             {
                 // Handle other DTO types dynamically
@@ -133,28 +374,26 @@ namespace ReadFromExcelSheet.Controllers
         }
 
 
-        [HttpGet("template")]
-        public IActionResult GetStudentTemplate()
-        {
 
+        [HttpGet("template")]
+        public IActionResult GetTemplate()  // Generic method
+        {
             using (var package = new ExcelPackage())
             {
-                var worksheet = package.Workbook.Worksheets.Add("Students");
+                var worksheet = package.Workbook.Worksheets.Add(typeof(Entity).Name); // Use the type name dynamically
 
-                worksheet.Cells[1, 1].Value = "Name";
-                worksheet.Cells[1, 2].Value = "Age";
-                worksheet.Cells[1, 3].Value = "Email";
-                worksheet.Cells[1, 4].Value = "ProfilePicture";
+                var properties = typeof(Entity).GetProperties(); // Get properties of the generic type
 
-                //worksheet.Cells[2, 1].Value = "Jane Doe";
-                //worksheet.Cells[2, 2].Value = 22;
-                //worksheet.Cells[2, 3].Value = "jane.doe@example.com";
-                //worksheet.Cells[2, 4].Value = "ImageHere";
+                // Set the header row dynamically
+                for (int i = 0; i < properties.Length; i++)
+                {
+                    worksheet.Cells[1, i + 1].Value = properties[i].Name;  // Assign property names as column headers
+                }
 
                 worksheet.Cells[worksheet.Dimension.Address].AutoFitColumns();
 
                 var excelBytes = package.GetAsByteArray();
-                var fileName = $"StudentTemplate_{DateTime.Now:yyyyMMddHHmmss}.xlsx";
+                var fileName = $"{typeof(Entity).Name}Template_{DateTime.Now:yyyyMMddHHmmss}.xlsx";
 
                 return File(excelBytes,
                             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
