@@ -17,6 +17,7 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddScoped<IFileService, FileService>();
 builder.Services.AddScoped<IStudentRepository, StudentRepository>();
+builder.Services.AddScoped<ICompanyRepo, CompanyRepo>();
 builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
 builder.Services.AddAutoMapper(typeof(DomainProfile).Assembly);
 ExcelPackage.LicenseContext = LicenseContext.NonCommercial;
@@ -26,6 +27,7 @@ ExcelPackage.LicenseContext = LicenseContext.NonCommercial;
 
 builder.Services.AddLocalizationConfig();
 builder.Services.AddScoped(typeof(IBaseRepo<BaseEntity<int>,EntitySC,int>), typeof(BaseRepo<BaseEntity<int>, EntitySC, int>));
+
 
 
 

@@ -11,6 +11,7 @@ namespace ReadFromExcelSheet.BLL.Interface
 
 
         public IStudentRepository Students { get;  set; }
+        public ICompanyRepo Companies { get;  set; }
 
 
 

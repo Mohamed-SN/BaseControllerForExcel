@@ -403,6 +403,8 @@ namespace ReadFromExcelSheet.Controllers
                 //#region Lookup
                 case nameof(Student):
                     return unitOfWork.Students;
+                case nameof(Company):
+                    return unitOfWork.Companies;
                 //case nameof(AttendanceType):
                 //    return unitOfWork.AttendanceTypeBL;
                 //case nameof(Branch):
