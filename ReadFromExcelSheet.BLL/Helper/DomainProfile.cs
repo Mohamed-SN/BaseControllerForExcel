@@ -26,6 +26,19 @@ namespace ReadFromExcelSheet.BLL.Helper
 
 
 
+            CreateMap<Company, ReturnCompanyDto>()
+    .ForMember(dest => dest.Logo,
+        opt => opt.MapFrom(src => Convert.FromBase64String(src.Logo)));
+
+            CreateMap<ReturnCompanyDto, Company>()
+                .ReverseMap();
+
+            CreateMap<CompanyDto, Company>()
+                .ForMember(dest => dest.Logo,
+                           opt => opt.MapFrom(src => Convert.ToBase64String(src.Logo)));
+
+
+
 
         }
 

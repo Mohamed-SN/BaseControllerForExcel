@@ -14,11 +14,13 @@ namespace ReadFromExcelSheet.BLL.Implementation
 
         private readonly ApplicationDbContext _context;
         public IStudentRepository Students { get; set; }
+        public ICompanyRepo Companies { get ; set; }
 
         public UnitOfWork(ApplicationDbContext context, IFileService fileService)
         {
             _context = context;
             Students = new StudentRepository(_context);
+            Companies = new CompanyRepo(_context);
             
 
         }
