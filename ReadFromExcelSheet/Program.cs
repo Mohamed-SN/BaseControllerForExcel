@@ -6,6 +6,7 @@ using ReadFromExcelSheet.BLL.Interface;
 using ReadFromExcelSheet.Configurations;
 using ReadFromExcelSheet.DAL.Database;
 using ReadFromExcelSheet.DAL.Extends;
+using ReadFromExcelSheet.Utiltes;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -16,6 +17,7 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddScoped<IFileService, FileService>();
+builder.Services.AddScoped<IExcelImportService, ExcelImportService>();
 builder.Services.AddScoped<IStudentRepository, StudentRepository>();
 builder.Services.AddScoped<ICompanyRepo, CompanyRepo>();
 builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();

@@ -368,6 +368,9 @@ namespace ReadFromExcelSheet.Controllers
             return Ok(new { Message = $"All {typeof(Entity).Name} imported successfully", Entity = entityToAdd });
         }
 
+
+        
+
         [HttpGet("template")]
         public IActionResult GetTemplate()  // Generic method
         {
@@ -375,10 +378,14 @@ namespace ReadFromExcelSheet.Controllers
             {
                 var worksheet = package.Workbook.Worksheets.Add(typeof(Entity).Name); // Use the type name dynamically
 
-                var properties = typeof(AddDto).GetProperties(); // Get properties of the generic type
+                var properties = typeof(AddDto).GetProperties()
+                .Where(a=>!a.Name
+                .ToLower()
+                .Contains("id"))
+                .ToList(); // Get properties of the generic type
 
                 // Set the header row dynamically
-                for (int i = 0; i < properties.Length; i++)
+                for (int i = 0; i < properties.Count(); i++)
                 {
                     worksheet.Cells[1, i + 1].Value = properties[i].Name;  // Assign property names as column headers
                 }
