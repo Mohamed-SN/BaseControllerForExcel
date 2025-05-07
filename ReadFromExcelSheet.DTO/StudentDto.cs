@@ -20,5 +20,7 @@ namespace ReadFromExcelSheet.DTO
         [Required]
         [MinLength(1)]
         public byte[] ProfilePicture { get; set; }
+
+        public int BranchId { get; set; }
     }
 }
