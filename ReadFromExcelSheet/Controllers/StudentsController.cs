@@ -17,7 +17,7 @@ using System.Text;
 
 [ApiController]
 [Route("api/[controller]")]
-public class StudentsController : BaseController<Student,EntitySC ,int,ReturnStudentDto, ReturnStudentDto, StudentDto,EditStudentDto>
+public class StudentsController : BaseController<Student,EntitySC ,int,ReturnStudentDto, ReturnStudentDto, StudentDto,EditStudentDto, StudentUploadDto>
 {
     private readonly IFileService _fileService;
     private readonly IMapper _mapper;
@@ -32,9 +32,39 @@ public class StudentsController : BaseController<Student,EntitySC ,int,ReturnStu
         _localizer = localizer;
     }
 
+    protected override async Task<List<Student>> ParseExcelToEntities(StudentUploadDto dto, string filePath)
+    {
+        var result = new List<Student>();
+
+        using var package = new ExcelPackage(new FileInfo(filePath));
+        var worksheet = package.Workbook.Worksheets.First();
+        var rowCount = worksheet.Dimension.Rows;
+
+        for (int row = 2; row <= rowCount; row++)
+        {
+            var name = worksheet.Cells[row, 1].Text;
+            //int age =int.TryParse worksheet.Cells[row, 2].Text;
+            var email = worksheet.Cells[row, 3].Text;
+            var profilePic = worksheet.Cells[row, 4].ToString();
+            if (string.IsNullOrWhiteSpace(name)) continue;
+
+            result.Add(new Student
+            {
+                Name = name,
+                BranchId = dto.BranchId,
+                //Age = age,
+                Email = email,
+                ProfilePicture = profilePic
+
+            });
+        }
+
+        return result;
+    }
+}
+
 
 
 
    
 
-}

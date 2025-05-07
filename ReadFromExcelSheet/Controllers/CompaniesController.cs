@@ -12,7 +12,7 @@ namespace ReadFromExcelSheet.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]
-    public class CompaniesController : BaseController<Company, EntitySC, short, ReturnCompanyDto, ReturnCompanyDto, CompanyDto, EditCompanyDto>
+    public class CompaniesController : BaseController<Company, EntitySC, short, ReturnCompanyDto, ReturnCompanyDto, CompanyDto, EditCompanyDto, StudentUploadDto>
     {
         private readonly IFileService _fileService;
         private readonly IMapper _mapper;

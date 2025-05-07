@@ -24,13 +24,14 @@ namespace ReadFromExcelSheet.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]
-    public class BaseController<Entity, SC, IdType, ReturnDto, ReturnWithDetailsDto, AddDto, EditDto> : ControllerBase
+    public class BaseController<Entity, SC, IdType, ReturnDto, ReturnWithDetailsDto, AddDto, EditDto,UploadDto> : ControllerBase
        where SC : EntitySC
        where Entity : BaseEntity<IdType>
        where ReturnDto : class
        where ReturnWithDetailsDto : class
        where AddDto : class,new()
        where EditDto : BaseDto<IdType>
+        where UploadDto :BaseFileDto
     {
         private readonly IUnitOfWork unitOfWork;
         private readonly IMapper mapper;
@@ -244,129 +245,177 @@ namespace ReadFromExcelSheet.Controllers
             }
         }
 
-        
+
+        //[HttpPost("upload")]
+        //public async Task<IActionResult> UploadExcel(IFormFile file)
+        //{
+        //    dynamic repo = GetRepository();
+
+        //    if (file == null || file.Length == 0)
+        //        return BadRequest("Invalid file.");
+
+        //    var bugs = new List<string>();
+        //    var dtoList = new List<AddDto>();
+
+        //    // Save uploaded Excel file temporarily
+        //    var tempFilePath = Path.GetTempFileName();
+        //    await using (var fs = new FileStream(tempFilePath, FileMode.Create, FileAccess.Write))
+        //    {
+        //        await file.CopyToAsync(fs);
+        //    }
+
+        //    // Extract images from Excel using OpenXML
+        //    var images = ExcelImageExtractor.ExtractImagesByOrder(tempFilePath);
+
+        //    using (var stream = new MemoryStream(System.IO.File.ReadAllBytes(tempFilePath)))
+        //    using (var package = new ExcelPackage(stream))
+        //    {
+        //        var worksheet = package.Workbook.Worksheets[0];
+        //        var rowCount = worksheet.Dimension.Rows;
+
+        //        for (int row = 2; row <= rowCount; row++)
+        //        {
+        //            // Map data to DTO
+        //            var dto = Utiltes.Utilites.MapRowToDto< AddDto > (worksheet, row, images, _fileService);
+
+        //            // Check for byte[] properties
+        //            var imageProperties = dto.GetType().GetProperties()
+        //                .Where(p => p.PropertyType == typeof(byte[]))
+        //                .ToList();
+
+        //            if (imageProperties.Any())
+        //            {
+        //                foreach (var prop in imageProperties)
+        //                {
+        //                    var imageValue = (byte[])prop.GetValue(dto);
+        //                    if (imageValue != null && imageValue.Length > 0)
+        //                    {
+        //                        var fileName = await _fileService.SaveFileAsync(
+        //                            imageValue,
+        //                            ".jpg",
+        //                            $"{typeof(Entity).Name}"
+        //                        );
+        //                        //prop.SetValue(dto, null); // Clear the byte[] after saving
+        //                    }
+        //                }
+        //            }
+
+        //            // Validate DTO data
+        //            var context = new ValidationContext(dto);
+        //            var validationResults = new List<ValidationResult>();
+        //            Validator.TryValidateObject(dto, context, validationResults, true);
+
+        //            if (validationResults.Any())
+        //            {
+        //                var bug = new StringBuilder($"row[{row}]");
+        //                foreach (var error in validationResults.Select(v => v.ErrorMessage))
+        //                    bug.Append(", " + error);
+        //                bugs.Add(bug.ToString());
+        //                continue;
+        //            }
+
+        //            dtoList.Add(dto);
+        //        }
+        //    }
+
+        //    System.IO.File.Delete(tempFilePath);
+
+        //    if (dtoList.Count == 0)
+        //        return BadRequest("No valid data found to import.");
+
+        //    var entityToAdd = new List<Entity>();
+        //    foreach (var dto in dtoList.Cast<AddDto>())
+        //    {
+        //        var entityItem = mapper.Map<Entity>(dto);
+
+        //        // Get the image properties from the DTO
+        //        var imageProperties = dto.GetType().GetProperties()
+        //            .Where(p => p.PropertyType == typeof(byte[]))
+        //            .ToList();
+
+        //        // Assign the saved file names to the entity
+        //        foreach (var prop in imageProperties)
+        //        {
+        //            var imageValue = (byte[])prop.GetValue(dto);
+        //            if (imageValue != null && imageValue.Length > 0)
+        //            {
+        //                var fileName = await _fileService.SaveFileAsync(
+        //                    imageValue,
+        //                    ".jpg",
+        //                    $"{typeof(Entity).Name}"
+        //                );
+
+        //                // Get the corresponding property in the entity
+        //                var entityProp = entityItem.GetType().GetProperty(prop.Name);
+        //                if (entityProp != null)
+        //                {
+        //                    entityProp.SetValue(entityItem, fileName);
+        //                }
+        //            }
+        //        }
+
+        //        entityToAdd.Add(entityItem);
+        //    }
+
+        //    var result = await repo.SaveRange(entityToAdd);
+        //    await unitOfWork.CompleteAsync();
+
+        //    if (result == null)
+        //        return StatusCode(500, $"Failed to save {typeof(Entity).Name}.");
+
+        //    if (bugs.Any())
+        //        return Ok(new { Message = "Imported with warnings", Errors = bugs });
+
+        //    return Ok(new { Message = $"All {typeof(Entity).Name} imported successfully", Entity = entityToAdd });
+        //}
+
         [HttpPost("upload")]
-        public async Task<IActionResult> UploadExcel(IFormFile file)
+        public virtual async Task<IActionResult> UploadExcel([FromForm] UploadDto dto)
         {
+            if (dto is not BaseFileDto fileDto)
+                return BadRequest("Invalid DTO: must inherit from BaseFileDto.");
+
+            if (fileDto.File == null || fileDto.File.Length == 0)
+                return BadRequest("File is required.");
+
             dynamic repo = GetRepository();
 
-            if (file == null || file.Length == 0)
-                return BadRequest("Invalid file.");
-
-            var bugs = new List<string>();
-            var dtoList = new List<AddDto>();
-
-            // Save uploaded Excel file temporarily
+            // Save temp file
             var tempFilePath = Path.GetTempFileName();
-            await using (var fs = new FileStream(tempFilePath, FileMode.Create, FileAccess.Write))
+            await using (var stream = new FileStream(tempFilePath, FileMode.Create))
             {
-                await file.CopyToAsync(fs);
+                await fileDto.File.CopyToAsync(stream);
             }
 
-            // Extract images from Excel using OpenXML
-            var images = ExcelImageExtractor.ExtractImagesByOrder(tempFilePath);
-
-            using (var stream = new MemoryStream(System.IO.File.ReadAllBytes(tempFilePath)))
-            using (var package = new ExcelPackage(stream))
+            try
             {
-                var worksheet = package.Workbook.Worksheets[0];
-                var rowCount = worksheet.Dimension.Rows;
+                // Let derived class handle the parsing of the Excel to entities
+                var entities = await ParseExcelToEntities(dto, tempFilePath);
 
-                for (int row = 2; row <= rowCount; row++)
-                {
-                    // Map data to DTO
-                    var dto = Utiltes.Utilites.MapRowToDto<AddDto>(worksheet, row, images, _fileService);
+                if (entities == null || !entities.Any())
+                    return BadRequest("No data found in file.");
 
-                    // Check for byte[] properties
-                    var imageProperties = dto.GetType().GetProperties()
-                        .Where(p => p.PropertyType == typeof(byte[]))
-                        .ToList();
+                // Save entities
+                 //repo.S(entities);
+                 await repo.SaveRange(entities);
+                await unitOfWork.CompleteAsync();
 
-                    if (imageProperties.Any())
-                    {
-                        foreach (var prop in imageProperties)
-                        {
-                            var imageValue = (byte[])prop.GetValue(dto);
-                            if (imageValue != null && imageValue.Length > 0)
-                            {
-                                var fileName = await _fileService.SaveFileAsync(
-                                    imageValue,
-                                    ".jpg",
-                                    $"{typeof(Entity).Name}"
-                                );
-                                //prop.SetValue(dto, null); // Clear the byte[] after saving
-                            }
-                        }
-                    }
-
-                    // Validate DTO data
-                    var context = new ValidationContext(dto);
-                    var validationResults = new List<ValidationResult>();
-                    Validator.TryValidateObject(dto, context, validationResults, true);
-
-                    if (validationResults.Any())
-                    {
-                        var bug = new StringBuilder($"row[{row}]");
-                        foreach (var error in validationResults.Select(v => v.ErrorMessage))
-                            bug.Append(", " + error);
-                        bugs.Add(bug.ToString());
-                        continue;
-                    }
-
-                    dtoList.Add(dto);
-                }
+                return Ok("Upload successful.");
             }
-
-            System.IO.File.Delete(tempFilePath);
-
-            if (dtoList.Count == 0)
-                return BadRequest("No valid data found to import.");
-
-            var entityToAdd = new List<Entity>();
-            foreach (var dto in dtoList.Cast<AddDto>())
+            catch (Exception ex)
             {
-                var entityItem = mapper.Map<Entity>(dto);
-
-                // Get the image properties from the DTO
-                var imageProperties = dto.GetType().GetProperties()
-                    .Where(p => p.PropertyType == typeof(byte[]))
-                    .ToList();
-
-                // Assign the saved file names to the entity
-                foreach (var prop in imageProperties)
-                {
-                    var imageValue = (byte[])prop.GetValue(dto);
-                    if (imageValue != null && imageValue.Length > 0)
-                    {
-                        var fileName = await _fileService.SaveFileAsync(
-                            imageValue,
-                            ".jpg",
-                            $"{typeof(Entity).Name}"
-                        );
-
-                        // Get the corresponding property in the entity
-                        var entityProp = entityItem.GetType().GetProperty(prop.Name);
-                        if (entityProp != null)
-                        {
-                            entityProp.SetValue(entityItem, fileName);
-                        }
-                    }
-                }
-
-                entityToAdd.Add(entityItem);
+                return StatusCode(500, $"Internal error: {ex.Message}");
             }
-
-            var result = await repo.SaveRange(entityToAdd);
-            await unitOfWork.CompleteAsync();
-
-            if (result == null)
-                return StatusCode(500, $"Failed to save {typeof(Entity).Name}.");
-
-            if (bugs.Any())
-                return Ok(new { Message = "Imported with warnings", Errors = bugs });
-
-            return Ok(new { Message = $"All {typeof(Entity).Name} imported successfully", Entity = entityToAdd });
+            finally
+            {
+                System.IO.File.Delete(tempFilePath); // Cleanup
+            }
         }
+        protected virtual Task<List<Entity>> ParseExcelToEntities(UploadDto dto, string filePath)
+        {
+            throw new NotImplementedException("Override this method in your controller.");
+        }
+
 
         [HttpGet("template")]
         public IActionResult GetTemplate()  // Generic method
