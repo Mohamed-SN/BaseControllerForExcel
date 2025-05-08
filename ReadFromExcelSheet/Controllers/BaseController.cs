@@ -24,27 +24,29 @@ namespace ReadFromExcelSheet.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]
-    public class BaseController<Entity, SC, IdType, ReturnDto, ReturnWithDetailsDto, AddDto, EditDto> : ControllerBase
+    public class BaseController<Entity, SC, IdType, ReturnDto, ReturnWithDetailsDto, AddDto, EditDto, UploadFile> : ControllerBase
        where SC : EntitySC
        where Entity : BaseEntity<IdType>
        where ReturnDto : class
        where ReturnWithDetailsDto : class
-       where AddDto : class,new()
+       where AddDto : class, new()
        where EditDto : BaseDto<IdType>
+        where UploadFile : BaseFileDto
+
     {
         private readonly IUnitOfWork unitOfWork;
         private readonly IMapper mapper;
         private readonly IFileService _fileService;
         private readonly IStringLocalizer<SharedResources> _localizer;
 
-        public BaseController(IUnitOfWork unitOfWork, IMapper mapper, IFileService fileService , IStringLocalizer<SharedResources> localizer)
+        public BaseController(IUnitOfWork unitOfWork, IMapper mapper, IFileService fileService, IStringLocalizer<SharedResources> localizer)
         {
             this.unitOfWork = unitOfWork;
             this.mapper = mapper;
             _fileService = fileService;
             this._localizer = localizer;
         }
-       
+
         [HttpPost("Get")]
 
         public virtual async Task<IActionResult> Get(SC sc)
@@ -244,13 +246,13 @@ namespace ReadFromExcelSheet.Controllers
             }
         }
 
-        
+
         [HttpPost("upload")]
-        public async Task<IActionResult> UploadExcel(IFormFile file)
+        public async Task<IActionResult> UploadExcel([FromForm] UploadFile file)
         {
             dynamic repo = GetRepository();
 
-            if (file == null || file.Length == 0)
+            if (file.File == null || file.File.Length == 0)
                 return BadRequest("Invalid file.");
 
             var bugs = new List<string>();
@@ -260,7 +262,7 @@ namespace ReadFromExcelSheet.Controllers
             var tempFilePath = Path.GetTempFileName();
             await using (var fs = new FileStream(tempFilePath, FileMode.Create, FileAccess.Write))
             {
-                await file.CopyToAsync(fs);
+                await file.File.CopyToAsync(fs);
             }
 
             // Extract images from Excel using OpenXML
@@ -276,30 +278,28 @@ namespace ReadFromExcelSheet.Controllers
                 {
                     // Map data to DTO
                     var dto = Utiltes.Utilites.MapRowToDto<AddDto>(worksheet, row, images, _fileService);
-
-                    // Check for byte[] properties
-                    var imageProperties = dto.GetType().GetProperties()
-                        .Where(p => p.PropertyType == typeof(byte[]))
-                        .ToList();
-
-                    if (imageProperties.Any())
+                    if (file.File != null)
                     {
-                        foreach (var prop in imageProperties)
+                        var foreignProps = file.GetType().GetProperties()
+                            .Where(p => p.Name != "Id" && p.Name.EndsWith("Id"));
+
+                        var EntityProps = typeof(AddDto).GetProperties()
+                            .Where(p => p.Name != "Id" && p.Name.EndsWith("Id"));
+
+                        foreach (var foreignProp in foreignProps)
                         {
-                            var imageValue = (byte[])prop.GetValue(dto);
-                            if (imageValue != null && imageValue.Length > 0)
+                            var value = foreignProp.GetValue(file);
+                            if (value is int intValue)
                             {
-                                var fileName = await _fileService.SaveFileAsync(
-                                    imageValue,
-                                    ".jpg",
-                                    $"{typeof(Entity).Name}"
-                                );
-                                //prop.SetValue(dto, null); // Clear the byte[] after saving
+                                EntityProps.FirstOrDefault(p => p.Name.ToLower() == foreignProp.Name.ToLower())?.SetValue(dto, intValue);
                             }
+                            
+
                         }
                     }
 
-                    // Validate DTO data
+
+
                     var context = new ValidationContext(dto);
                     var validationResults = new List<ValidationResult>();
                     Validator.TryValidateObject(dto, context, validationResults, true);
@@ -369,7 +369,7 @@ namespace ReadFromExcelSheet.Controllers
         }
 
 
-        
+
 
         [HttpGet("template")]
         public IActionResult GetTemplate()  // Generic method
@@ -379,7 +379,7 @@ namespace ReadFromExcelSheet.Controllers
                 var worksheet = package.Workbook.Worksheets.Add(typeof(Entity).Name); // Use the type name dynamically
 
                 var properties = typeof(AddDto).GetProperties()
-                .Where(a=>!a.Name
+                .Where(a => !a.Name
                 .ToLower()
                 .Contains("id"))
                 .ToList(); // Get properties of the generic type

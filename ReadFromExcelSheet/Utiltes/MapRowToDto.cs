@@ -33,7 +33,7 @@ namespace ReadFromExcelSheet.Utiltes
                 {
                     prop.SetValue(obj, float.TryParse(cellValue, out var floatValue) ? floatValue : 0);
                 }
-                else if (prop.PropertyType == typeof(byte[]) )
+                else if (prop.PropertyType == typeof(byte[]) && prop.Name.ToLower() == "profilepicture")
                 {
                     // Assuming that the image is stored in the 'images' list corresponding to the row number
                     int imageIndex = row - 2; // Image index is based on row number (adjust if needed)

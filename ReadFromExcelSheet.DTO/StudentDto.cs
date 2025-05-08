@@ -17,10 +17,11 @@ namespace ReadFromExcelSheet.DTO
 
         [EmailAddress]
         public string Email { get; set; }
-        public int BranchId { get; set; }
 
         [Required]
         [MinLength(1)]
         public byte[] ProfilePicture { get; set; }
+
+        public int BranchId { get; set; }
     }
 }
