@@ -12,6 +12,7 @@ using ReadFromExcelSheet.DAL.Extends;
 using ReadFromExcelSheet.DTO;
 using ReadFromExcelSheet.Resources;
 using ReadFromExcelSheet.Utilites;
+using ReadFromExcelSheet.Utiltes;
 using System.ComponentModel.DataAnnotations;
 using System.Diagnostics.Metrics;
 using System.Net;
@@ -38,13 +39,16 @@ namespace ReadFromExcelSheet.Controllers
         private readonly IMapper mapper;
         private readonly IFileService _fileService;
         private readonly IStringLocalizer<SharedResources> _localizer;
+        private readonly IExcelSheetService<UploadFile, AddDto, Entity, IdType> _excelSheetService;
 
-        public BaseController(IUnitOfWork unitOfWork, IMapper mapper, IFileService fileService, IStringLocalizer<SharedResources> localizer)
+        public BaseController(IUnitOfWork unitOfWork, IMapper mapper, IFileService fileService, IStringLocalizer<SharedResources> localizer, IExcelSheetService<UploadFile, AddDto, Entity, IdType> excelSheetService)
         {
             this.unitOfWork = unitOfWork;
             this.mapper = mapper;
             _fileService = fileService;
             this._localizer = localizer;
+            _excelSheetService = excelSheetService;
+            //_excelSheetService = excelSheetService;
         }
 
         [HttpPost("Get")]
@@ -247,125 +251,138 @@ namespace ReadFromExcelSheet.Controllers
         }
 
 
+        //[HttpPost("upload")]
+        //public async Task<IActionResult> UploadExcel([FromForm] UploadFile file)
+        //{
+        //    dynamic repo = GetRepository();
+
+        //    if (file.File == null || file.File.Length == 0)
+        //        return BadRequest("Invalid file.");
+
+        //    var bugs = new List<string>();
+        //    var dtoList = new List<AddDto>();
+
+        //    // Save uploaded Excel file temporarily
+        //    var tempFilePath = Path.GetTempFileName();
+        //    await using (var fs = new FileStream(tempFilePath, FileMode.Create, FileAccess.Write))
+        //    {
+        //        await file.File.CopyToAsync(fs);
+        //    }
+
+        //    // Extract images from Excel using OpenXML
+        //    var images = ExcelImageExtractor.ExtractImagesByOrder(tempFilePath);
+
+        //    using (var stream = new MemoryStream(System.IO.File.ReadAllBytes(tempFilePath)))
+        //    using (var package = new ExcelPackage(stream))
+        //    {
+        //        var worksheet = package.Workbook.Worksheets[0];
+        //        var rowCount = worksheet.Dimension.Rows;
+
+        //        for (int row = 2; row <= rowCount; row++)
+        //        {
+        //            // Map data to DTO
+        //            var dto = Utiltes.Utilites.MapRowToDto<AddDto>(worksheet, row, images, _fileService);
+        //            if (file.File != null)
+        //            {
+        //                var foreignProps = file.GetType().GetProperties()
+        //                    .Where(p => p.Name != "Id" && p.Name.EndsWith("Id"));
+
+        //                var EntityProps = typeof(AddDto).GetProperties()
+        //                    .Where(p => p.Name != "Id" && p.Name.EndsWith("Id"));
+
+        //                foreach (var foreignProp in foreignProps)
+        //                {
+        //                    var value = foreignProp.GetValue(file);
+        //                    if (value is int intValue)
+        //                    {
+        //                        EntityProps.FirstOrDefault(p => p.Name.ToLower() == foreignProp.Name.ToLower())?.SetValue(dto, intValue);
+        //                    }
+
+
+        //                }
+        //            }
+
+
+
+        //            var context = new ValidationContext(dto);
+        //            var validationResults = new List<ValidationResult>();
+        //            Validator.TryValidateObject(dto, context, validationResults, true);
+
+        //            if (validationResults.Any())
+        //            {
+        //                var bug = new StringBuilder($"row[{row}]");
+        //                foreach (var error in validationResults.Select(v => v.ErrorMessage))
+        //                    bug.Append(", " + error);
+        //                bugs.Add(bug.ToString());
+        //                continue;
+        //            }
+
+        //            dtoList.Add(dto);
+        //        }
+        //    }
+
+        //    System.IO.File.Delete(tempFilePath);
+
+        //    if (dtoList.Count == 0)
+        //        return BadRequest("No valid data found to import.");
+
+        //    var entityToAdd = new List<Entity>();
+        //    foreach (var dto in dtoList.Cast<AddDto>())
+        //    {
+        //        var entityItem = mapper.Map<Entity>(dto);
+
+        //        // Get the image properties from the DTO
+        //        var imageProperties = dto.GetType().GetProperties()
+        //            .Where(p => p.PropertyType == typeof(byte[]))
+        //            .ToList();
+
+        //        // Assign the saved file names to the entity
+        //        foreach (var prop in imageProperties)
+        //        {
+        //            var imageValue = (byte[])prop.GetValue(dto);
+        //            if (imageValue != null && imageValue.Length > 0)
+        //            {
+        //                var fileName = await _fileService.SaveFileAsync(
+        //                    imageValue,
+        //                    ".jpg",
+        //                    $"{typeof(Entity).Name}"
+        //                );
+
+        //                // Get the corresponding property in the entity
+        //                var entityProp = entityItem.GetType().GetProperty(prop.Name);
+        //                if (entityProp != null)
+        //                {
+        //                    entityProp.SetValue(entityItem, fileName);
+        //                }
+        //            }
+        //        }
+
+        //        entityToAdd.Add(entityItem);
+        //    }
+
+        //    var result = await repo.SaveRange(entityToAdd);
+        //    await unitOfWork.CompleteAsync();
+
+        //    if (result == null)
+        //        return StatusCode(500, $"Failed to save {typeof(Entity).Name}.");
+
+        //    if (bugs.Any())
+        //        return Ok(new { Message = "Imported with warnings", Errors = bugs });
+
+        //    return Ok(new { Message = $"All {typeof(Entity).Name} imported successfully", Entity = entityToAdd });
+        //}
         [HttpPost("upload")]
         public async Task<IActionResult> UploadExcel([FromForm] UploadFile file)
         {
+
             dynamic repo = GetRepository();
 
-            if (file.File == null || file.File.Length == 0)
-                return BadRequest("Invalid file.");
+            var result = await _excelSheetService.ProcessExcelFileAsync(file, repo);
 
-            var bugs = new List<string>();
-            var dtoList = new List<AddDto>();
+            if (!result.success)
+                return BadRequest(result.message);
 
-            // Save uploaded Excel file temporarily
-            var tempFilePath = Path.GetTempFileName();
-            await using (var fs = new FileStream(tempFilePath, FileMode.Create, FileAccess.Write))
-            {
-                await file.File.CopyToAsync(fs);
-            }
-
-            // Extract images from Excel using OpenXML
-            var images = ExcelImageExtractor.ExtractImagesByOrder(tempFilePath);
-
-            using (var stream = new MemoryStream(System.IO.File.ReadAllBytes(tempFilePath)))
-            using (var package = new ExcelPackage(stream))
-            {
-                var worksheet = package.Workbook.Worksheets[0];
-                var rowCount = worksheet.Dimension.Rows;
-
-                for (int row = 2; row <= rowCount; row++)
-                {
-                    // Map data to DTO
-                    var dto = Utiltes.Utilites.MapRowToDto<AddDto>(worksheet, row, images, _fileService);
-                    if (file.File != null)
-                    {
-                        var foreignProps = file.GetType().GetProperties()
-                            .Where(p => p.Name != "Id" && p.Name.EndsWith("Id"));
-
-                        var EntityProps = typeof(AddDto).GetProperties()
-                            .Where(p => p.Name != "Id" && p.Name.EndsWith("Id"));
-
-                        foreach (var foreignProp in foreignProps)
-                        {
-                            var value = foreignProp.GetValue(file);
-                            if (value is int intValue)
-                            {
-                                EntityProps.FirstOrDefault(p => p.Name.ToLower() == foreignProp.Name.ToLower())?.SetValue(dto, intValue);
-                            }
-                            
-
-                        }
-                    }
-
-
-
-                    var context = new ValidationContext(dto);
-                    var validationResults = new List<ValidationResult>();
-                    Validator.TryValidateObject(dto, context, validationResults, true);
-
-                    if (validationResults.Any())
-                    {
-                        var bug = new StringBuilder($"row[{row}]");
-                        foreach (var error in validationResults.Select(v => v.ErrorMessage))
-                            bug.Append(", " + error);
-                        bugs.Add(bug.ToString());
-                        continue;
-                    }
-
-                    dtoList.Add(dto);
-                }
-            }
-
-            System.IO.File.Delete(tempFilePath);
-
-            if (dtoList.Count == 0)
-                return BadRequest("No valid data found to import.");
-
-            var entityToAdd = new List<Entity>();
-            foreach (var dto in dtoList.Cast<AddDto>())
-            {
-                var entityItem = mapper.Map<Entity>(dto);
-
-                // Get the image properties from the DTO
-                var imageProperties = dto.GetType().GetProperties()
-                    .Where(p => p.PropertyType == typeof(byte[]))
-                    .ToList();
-
-                // Assign the saved file names to the entity
-                foreach (var prop in imageProperties)
-                {
-                    var imageValue = (byte[])prop.GetValue(dto);
-                    if (imageValue != null && imageValue.Length > 0)
-                    {
-                        var fileName = await _fileService.SaveFileAsync(
-                            imageValue,
-                            ".jpg",
-                            $"{typeof(Entity).Name}"
-                        );
-
-                        // Get the corresponding property in the entity
-                        var entityProp = entityItem.GetType().GetProperty(prop.Name);
-                        if (entityProp != null)
-                        {
-                            entityProp.SetValue(entityItem, fileName);
-                        }
-                    }
-                }
-
-                entityToAdd.Add(entityItem);
-            }
-
-            var result = await repo.SaveRange(entityToAdd);
-            await unitOfWork.CompleteAsync();
-
-            if (result == null)
-                return StatusCode(500, $"Failed to save {typeof(Entity).Name}.");
-
-            if (bugs.Any())
-                return Ok(new { Message = "Imported with warnings", Errors = bugs });
-
-            return Ok(new { Message = $"All {typeof(Entity).Name} imported successfully", Entity = entityToAdd });
+            return Ok(result.message);
         }
 
 
@@ -412,178 +429,7 @@ namespace ReadFromExcelSheet.Controllers
                     return unitOfWork.Students;
                 case nameof(Company):
                     return unitOfWork.Companies;
-                //case nameof(AttendanceType):
-                //    return unitOfWork.AttendanceTypeBL;
-                //case nameof(Branch):
-                //    return unitOfWork.BranchBL;
-                //case nameof(BusinessSize):
-                //    return unitOfWork.BusinessSizeBL;
-                //case nameof(BusinessType):
-                //    return unitOfWork.BusinessTypeBL;
-                //case nameof(CertificateType):
-                //    return unitOfWork.CertificateTypeBL;
-                //case nameof(City):
-                //    return unitOfWork.CityBL;
-                //case nameof(Country):
-                //    return unitOfWork.CountryBL;
-                //case nameof(Department):
-                //    return unitOfWork.DepartmentBL;
-                //case nameof(DocumentType):
-                //    return unitOfWork.DocumentTypeBL;
-                //case nameof(FileDescription):
-                //    return unitOfWork.FileDescriptionBL;
-                //case nameof(FileDescriptionType):
-                //    return unitOfWork.FileDescriptionTypeBL;
-                //case nameof(Language):
-                //    return unitOfWork.LanguageBL;
-                //case nameof(LifeStyleType):
-                //    return unitOfWork.LifeStyleTypeBL;
-                //case nameof(MedicalInsuranceCompany):
-                //    return unitOfWork.MedicalInsuranceCompanyBL;
-
-                //case nameof(OnBoarding):
-                //    return unitOfWork.OnBoardingBL;
-
-                //case nameof(PersonalType):
-                //    return unitOfWork.PersonalTypeBL;
-
-                //case nameof(PositionType):
-                //    return unitOfWork.PositionTypeBL;
-                //case nameof(Position):
-                //    return unitOfWork.PositionBL;
-
-                //case nameof(RefernceType):
-                //    return unitOfWork.RefernceTypeBL;
-
-
-
-                //case nameof(SkillsType):
-                //    return unitOfWork.SkillsTypeBL;
-                //case nameof(University):
-                //    return unitOfWork.UniversityBL;
-                //case nameof(Zone):
-                //    return unitOfWork.ZoneBL;
-                //#endregion
-
-
-                //#region Employee
-                //case nameof(Employee):
-                //    return unitOfWork.EmployeeBL;
-                //case nameof(EmployeeAttendance):
-                //    return unitOfWork.EmployeeAttendanceBL;
-                //case nameof(EmployeeCertificate):
-                //    return unitOfWork.EmployeeCertificateBL;
-                //case nameof(EmployeeEducational):
-                //    return unitOfWork.EmployeeEducationalBL;
-                //case nameof(EmployeeHealthInformation):
-                //    return unitOfWork.EmployeeHealthInformationBL;
-                //case nameof(EmployeeIdentityDocument):
-                //    return unitOfWork.EmployeeIdentityDocumentBL;
-                //case nameof(EmployeeLanguage):
-                //    return unitOfWork.EmployeeLanguageBL;
-                //case nameof(EmployeeSkill):
-                //    return unitOfWork.EmployeeSkillBL;
-                //case nameof(EmployeeWorkHistory):
-                //    return unitOfWork.EmployeeWorkHistoryBL;
-                //case nameof(EmployeeSalary):
-                //    return unitOfWork.EmployeeSalaryBL;
-                //case nameof(EmployeeAttendanceLocation):
-                //    return unitOfWork.EmployeeAttendanceLocationBL;
-
-                //case nameof(EmployeeLevel):
-                //    return unitOfWork.EmployeeLevelBL;
-                //case nameof(EmployeeLevelSetting):
-                //    return unitOfWork.EmployeeLevelSettingBL;
-                //case nameof(EmployeeBenefit):
-                //    return unitOfWork.EmployeeBenefitBL;
-
-                //#endregion
-
-                //#region Request
-                //case nameof(RequestAttachment):
-                //    return unitOfWork.RequestAttachmentBL;
-                //case nameof(Softic.DAL.Entities.Request):
-                //    return unitOfWork.RequestBL;
-                //case nameof(RequestStatus):
-                //    return unitOfWork.RequestStatusBL;
-
-                //case nameof(RequestType):
-                //    return unitOfWork.RequestTypeBL;
-                //case nameof(RequestTypeConfig):
-                //    return unitOfWork.RequestTypeConfigBL;
-
-                //case nameof(RequestApprovalMatrix):
-                //    return unitOfWork.RequestApprovalMatrixBL;
-                //#endregion
-
-                //#region User
-
-                //case nameof(UserAddress):
-                //    return unitOfWork.UserAddressBL;
-                //case nameof(UserAttachment):
-                //    return unitOfWork.UserAttachmentBL;
-                //case nameof(UserEmail):
-                //    return unitOfWork.UserEmailBL;
-                //case nameof(UserLifeStyle):
-                //    return unitOfWork.UserLifeStyleBL;
-                //case nameof(UserRefernce):
-                //    return unitOfWork.UserRefernceBL;
-                //case nameof(UserTelephone):
-                //    return unitOfWork.UserTelephoneBL;
-                //#endregion
-
-                //#region Issue
-                //case nameof(Issue):
-                //    return unitOfWork.IssueBL;
-                //case nameof(IssueAttachment):
-                //    return unitOfWork.IssueAttachmentBL;
-                //case nameof(IssueExcuter):
-                //    return unitOfWork.IssueExcuterBL;
-                //case nameof(IssueComment):
-                //    return unitOfWork.IssueCommentBL;
-
-                //#endregion
-
-                //case nameof(Support):
-                //    return unitOfWork.SupportBL;
-                //case nameof(SupportAttachment):
-                //    return unitOfWork.SupportAttachmentBL;
-
-
-                //case nameof(NotificationLog):
-                //    return unitOfWork.NotificationLogBL;
-
-                //case nameof(Asset):
-                //    return unitOfWork.AssetBL;
-
-                //case nameof(RelatedAsset):
-                //    return unitOfWork.RelatedAssetBL;
-
-                //case nameof(AssetAttachment):
-                //    return unitOfWork.AssetAttachmentBL;
-
-                //case nameof(DAL.TaskStatus):
-                //    return unitOfWork.TaskStatusBL;
-                //case nameof(TaskPriority):
-                //    return unitOfWork.TaskPriorityBL;
-                //case nameof(Tasks):
-                //    return unitOfWork.TaskBL;
-                //case nameof(ArchivedTask):
-                //    return unitOfWork.ArchivedTasksBL;
-                //case nameof(ToDoItem):
-                //    return unitOfWork.ToDoItemBL;
-                //case nameof(TaskAssignment):
-                //    return unitOfWork.TaskAssignmentBL;
-                //case nameof(TaskAttachment):
-                //    return unitOfWork.TaskAttachmentBL;
-                //case nameof(Softic.DAL.Entities.Help):
-                //    return unitOfWork.HelpBL;
-                //case nameof(HelpAttachment):
-                //    return unitOfWork.HelpAttachmentBL;
-
-                //case nameof(CompanySubscription):
-                //    return unitOfWork.CompanySubscriptionBL;
-
+              
                 default:
                     throw new ArgumentException($"Repository for type {typeof(Entity).Name} not found");
             }

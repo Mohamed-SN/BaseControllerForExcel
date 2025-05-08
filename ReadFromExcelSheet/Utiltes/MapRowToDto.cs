@@ -48,6 +48,21 @@ namespace ReadFromExcelSheet.Utiltes
                         prop.SetValue(obj, Array.Empty<byte>());
                     }
                 }
+                else if (prop.PropertyType == typeof(byte[]) && prop.Name.ToLower() == "logo")
+                {
+                    // Assuming that the image is stored in the 'images' list corresponding to the row number
+                    int imageIndex = row - 2; // Image index is based on row number (adjust if needed)
+
+                    if (images != null && imageIndex >= 0 && imageIndex < images.Count)
+                    {
+                        var imageBytes = images[imageIndex]; // Use the byte[] image
+                        prop.SetValue(obj, imageBytes); // Assign the byte[] to the property
+                    }
+                    else
+                    {
+                        prop.SetValue(obj, Array.Empty<byte>());
+                    }
+                }
             }
 
             return obj;

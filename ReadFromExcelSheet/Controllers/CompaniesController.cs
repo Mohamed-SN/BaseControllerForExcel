@@ -13,13 +13,13 @@ using ReadFromExcelSheet.DTO;
 using ReadFromExcelSheet.Resources;
 using ReadFromExcelSheet.Utilites;
 using ReadFromExcelSheet.Utiltes;
+using ServiceStack;
 using System.ComponentModel.DataAnnotations;
 using System.Text;
 
 namespace ReadFromExcelSheet.Controllers
 {
-    [Route("api/[controller]")]
-    [ApiController]
+
     public class CompaniesController : BaseController<Company, EntitySC, short, ReturnCompanyDto, ReturnCompanyDto, CompanyDto, EditCompanyDto,CompanyFileDto>
     {
         private readonly IFileService _fileService;
@@ -27,15 +27,16 @@ namespace ReadFromExcelSheet.Controllers
         private readonly IMapper _mapper;
         private readonly IUnitOfWork _unitOfWork;
         private readonly IStringLocalizer<SharedResources> _localizer;
+        private readonly IExcelSheetService<CompanyFileDto, CompanyDto, Company, short> _excelSheetService;
 
-        public CompaniesController(IFileService fileService, IMapper mapper, IUnitOfWork unitOfWork, IStringLocalizer<SharedResources> localizer) : base(unitOfWork, mapper, fileService , localizer)
+        public CompaniesController(IFileService fileService, IMapper mapper, IUnitOfWork unitOfWork, IStringLocalizer<SharedResources> localizer, IExcelSheetService<CompanyFileDto, CompanyDto, Company, short> excelSheetService ) : base(unitOfWork, mapper, fileService , localizer, excelSheetService)
         {
             _fileService = fileService;
             //_excelImportService = excelImportService;
             _mapper = mapper;
             _unitOfWork = unitOfWork;
             _localizer = localizer;
-            
+            _excelSheetService = excelSheetService;
         }
 
         //[HttpPost("upload-company")]

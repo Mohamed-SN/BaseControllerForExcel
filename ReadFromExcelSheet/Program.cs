@@ -1,3 +1,5 @@
+using DocumentFormat.OpenXml.Office2016.Drawing.ChartDrawing;
+using DocumentFormat.OpenXml.Wordprocessing;
 using Microsoft.EntityFrameworkCore;
 using OfficeOpenXml;
 using ReadFromExcelSheet.BLL.Helper;
@@ -6,7 +8,9 @@ using ReadFromExcelSheet.BLL.Interface;
 using ReadFromExcelSheet.Configurations;
 using ReadFromExcelSheet.DAL.Database;
 using ReadFromExcelSheet.DAL.Extends;
+using ReadFromExcelSheet.DTO;
 using ReadFromExcelSheet.Utiltes;
+using ServiceStack;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -29,7 +33,7 @@ ExcelPackage.LicenseContext = LicenseContext.NonCommercial;
 
 builder.Services.AddLocalizationConfig();
 builder.Services.AddScoped(typeof(IBaseRepo<BaseEntity<int>,EntitySC,int>), typeof(BaseRepo<BaseEntity<int>, EntitySC, int>));
-
+builder.Services.AddScoped(typeof(IExcelSheetService<, , ,>), typeof(ExcelSheetService<,,,>));
 
 
 

@@ -24,14 +24,16 @@ public class StudentsController : BaseController<Student, EntitySC, int, ReturnS
     private readonly IMapper _mapper;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IStringLocalizer<SharedResources> _localizer;
+    private readonly IExcelSheetService<StudentFileDto, StudentDto, Student, int> _excelSheetService;
 
-    public StudentsController(IFileService fileService, IMapper mapper, IUnitOfWork unitOfWork, IStringLocalizer<SharedResources> localizer) : base(unitOfWork, mapper, fileService , localizer)
+    public StudentsController(IFileService fileService, IMapper mapper, IUnitOfWork unitOfWork, IStringLocalizer<SharedResources> localizer, IExcelSheetService<StudentFileDto,StudentDto, Student, int> excelSheetService) : base(unitOfWork, mapper, fileService , localizer, excelSheetService)
     {
         _fileService = fileService;
         //_excelImportService = excelImportService;
         _mapper = mapper;
         _unitOfWork = unitOfWork;
         _localizer = localizer;
+        _excelSheetService = excelSheetService;
     }
 
     //[HttpPost("upload-Student")]

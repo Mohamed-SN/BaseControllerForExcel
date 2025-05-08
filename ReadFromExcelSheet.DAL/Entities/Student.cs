@@ -14,8 +14,7 @@ namespace ReadFromExcelSheet.DAL.Entities
         public int Age { get; set; }
         public string Email { get; set; }
         public int BranchId { get; set; }
-
-        [Column(TypeName = "nvarchar(max)")]
+        //public Branch Branch { get; set; }
         public string ProfilePicture { get; set; }
     }
 }
