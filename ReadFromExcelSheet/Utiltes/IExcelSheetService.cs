@@ -130,6 +130,11 @@ namespace ReadFromExcelSheet.Utiltes
             if (dtoList.Count == 0)
                 bugs.Add($"No valid data found to import.");
 
+            if (bugs.Any())
+            {
+                throw new Exception(string.Join(Environment.NewLine, bugs));
+            }
+
             var entityToAdd = new List<Entity>();
             foreach (var dto in dtoList.Cast<AddDto>())
             {
@@ -172,8 +177,7 @@ namespace ReadFromExcelSheet.Utiltes
 
             if (bugs.Any())
             {
-                bugs.Add("Imported with warnings");
-                throw new Exception(bugs.ToString());
+                throw new Exception(string.Join(Environment.NewLine, bugs));
             }
 
 
