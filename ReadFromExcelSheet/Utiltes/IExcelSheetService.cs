@@ -18,7 +18,7 @@ namespace ReadFromExcelSheet.Utiltes
         where AddDto : class, new()
         where Entity : BaseEntity<IdType>
     {
-        Task<(List<AddDto> dtoList, List<string> bugs)> ProcessExcelFileAsync(
+        Task<List<Entity>> ProcessExcelFileAsync(
             UploadFile file,
             dynamic repo);
     }
@@ -42,7 +42,7 @@ namespace ReadFromExcelSheet.Utiltes
             _unitOfWork = unitOfWork;
         }
 
-        public async Task<(List<AddDto> dtoList, List<string> bugs)> ProcessExcelFileAsync(
+        public async Task<List<Entity>> ProcessExcelFileAsync(
             UploadFile file,
             dynamic repo)
         {
@@ -52,7 +52,6 @@ namespace ReadFromExcelSheet.Utiltes
             if (file.File == null || file.File.Length == 0)
             {
                 bugs.Add("Invalid file.");
-                return (dtoList, bugs);
             }
 
             var tempFilePath = Path.GetTempFileName();
@@ -172,9 +171,13 @@ namespace ReadFromExcelSheet.Utiltes
                bugs.Add($"Failed to save {typeof(Entity).Name}.");
 
             if (bugs.Any())
+            {
                 bugs.Add("Imported with warnings");
+                throw new Exception(bugs.ToString());
+            }
 
-            return _mapper.Map<List<AddDto>>(result);
+
+            return (result);
 
 
 

@@ -1,5 +1,6 @@
 ﻿using AutoMapper;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Localization;
 using Microsoft.OpenApi.Models;
@@ -376,13 +377,19 @@ namespace ReadFromExcelSheet.Controllers
         {
 
             dynamic repo = GetRepository();
+            try
+            {
+                var result = await _excelSheetService.ProcessExcelFileAsync(file, repo);
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
 
-            var result = await _excelSheetService.ProcessExcelFileAsync(file, repo);
+                return BadRequest(ex.Message);
+            }
 
-            if (!result.success)
-                return BadRequest(result.message);
+           
 
-            return Ok(result.message);
         }
 
 
