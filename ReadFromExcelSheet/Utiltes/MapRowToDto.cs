@@ -6,7 +6,6 @@ namespace ReadFromExcelSheet.Utiltes
 {
     public static class Utilites
     {
-
         public static T MapRowToDto<T>(ExcelWorksheet worksheet, int row, List<byte[]> images, IFileService fileService) where T :class, new()
         {
             var obj = new T();
@@ -64,10 +63,7 @@ namespace ReadFromExcelSheet.Utiltes
                     }
                 }
             }
-
             return obj;
         }
-
-
     }
 }

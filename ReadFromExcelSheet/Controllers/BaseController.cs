@@ -388,12 +388,7 @@ namespace ReadFromExcelSheet.Controllers
                 return BadRequest(ex.Message);
             }
 
-           
-
         }
-
-
-
 
         [HttpGet("template")]
         public IActionResult GetTemplate()  // Generic method

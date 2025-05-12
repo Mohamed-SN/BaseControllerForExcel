@@ -25,12 +25,9 @@ namespace ReadFromExcelSheet.Utilites
                             stream.CopyTo(ms);
                             images.Add(ms.ToArray());
                         }
-
                     }
                 }
             }
-           
-
             return images;
         }
     }

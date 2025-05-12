@@ -23,9 +23,6 @@ namespace ReadFromExcelSheet.Utiltes
             dynamic repo);
     }
 
-
-
-
     public class ExcelSheetService<UploadFile, AddDto, Entity, IdType> : IExcelSheetService<UploadFile, AddDto, Entity, IdType>
     where UploadFile : BaseFileDto
     where AddDto : class, new()
@@ -116,15 +113,6 @@ namespace ReadFromExcelSheet.Utiltes
                     }
                 }
             }
-
-
-
-
-
-
-
-
-
             System.IO.File.Delete(tempFilePath);
 
             if (dtoList.Count == 0)
@@ -180,16 +168,7 @@ namespace ReadFromExcelSheet.Utiltes
                 throw new Exception(string.Join(Environment.NewLine, bugs));
             }
 
-
             return (result);
-
-
-
-
-
-
-
-
 
         }
     }
